@@ -53,7 +53,7 @@ def chat(req: ChatRequest):
     if not req.request_id:
         raise HTTPException(422, '今日任务识别需要request_id，重试必须复用该ID。')
     return memo.execute(services.db, services.llm, req.user_id, req.request_id,
-                        {'action':'intake','text':req.message})
+                        {'action':'chat','text':req.message})
 
 
 @app.post("/api/reminders/poll", deprecated=True)
