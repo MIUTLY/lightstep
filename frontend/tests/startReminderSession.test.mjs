@@ -23,7 +23,7 @@ async function setup(overrides = {}) {
 		calls.push({ name, args }); return fn(...args)
 	}
 	const { useSession } = await loadFrontend('store/session.js', {
-		mocks: { vue: { reactive: x => x }, './user.js': { useUser: () => ({ current: () => user.id }) }, '@/api/index.js': api },
+		mocks: { vue: { reactive: x => x, ref: value => ({ value }) }, './user.js': { useUser: () => ({ current: () => user.id }) }, '@/api/index.js': api },
 		globals: { setInterval: clock.setInterval, clearInterval: clock.clearInterval }
 	})
 	const session = useSession()

@@ -19,15 +19,7 @@
 			</view>
 		</view>
 
-		<!-- 5 分钟到了：两个很小很小的按钮，不挽留 -->
-		<view v-if="anchorDue" class="anchor-row">
-			<view class="tiny-btn" @tap.stop="onAnchorExit">
-				<text>就到这吧</text>
-			</view>
-			<view class="tiny-btn" @tap.stop="onAnchorAgain">
-				<text>再来 5 分钟</text>
-			</view>
-		</view>
+		<FiveMinuteChoice />
 
 		<!-- 底部：两个按钮 + 一句很轻的「还是有点重」 -->
 		<view class="bottom">
@@ -63,7 +55,7 @@
  *  - 点「今天到这吧」直接走，不弹确认、不留记录
  */
 import { computed, ref, watch } from 'vue'
-import { onHide, onShow } from '@dcloudio/uni-app'
+import { onHide, onShow, onUnload } from '@dcloudio/uni-app'
 
 import CatBuddy from '@/components/CatBuddy.vue'
 import SoftLine from '@/components/SoftLine.vue'
@@ -71,7 +63,7 @@ import SoftLine from '@/components/SoftLine.vue'
 import { useSession } from '@/store/session.js'
 import { useSettings } from '@/store/settings.js'
 import { useSoftRecall } from '@/composables/useSoftRecall.js'
-import { useFiveMinuteAnchor } from '@/composables/useFiveMinuteAnchor.js'
+import FiveMinuteChoice from '@/components/FiveMinuteChoice.vue'
 import { catPoseOfSteps } from '@/utils/format.js'
 import { getStatusBarHeight } from '@/utils/systemInfo.js'
 
@@ -107,36 +99,30 @@ const {
 	reset: resetRecall
 } = useSoftRecall({ enabled: () => !settings.dnd })
 
-const { due: anchorDue, start: startAnchor, again: anchorAgain, stop: stopAnchor } = useFiveMinuteAnchor()
+let pageVersion = 0
 
-const anchorRunning = ref(false)
-
-onShow(() => {
+onShow(async () => {
+	const version = ++pageVersion
+	leaving = false
 	settings.load()
-
-	// 直接进来（没有进行中的任务）就退回对话页，不显示空壳
 	if (!session.task || session.task.state !== 'executing') {
-		if (session.state === 'executing') {
-			// 状态机说在执行但没拿到任务快照，补一次
-			session.syncState()
-		} else {
+		if (session.state === 'executing') await session.syncState()
+		if (version !== pageVersion) return
+		if (!session.task || session.task.state !== 'executing') {
 			backToChat()
 			return
 		}
 	}
-
 	resetRecall()
-	if (!anchorRunning.value) {
-		anchorRunning.value = true
-		startAnchor()
-	}
 })
 
-onHide(() => {
+function stopPageChecks() {
+	pageVersion += 1
 	stopRecall()
-	stopAnchor()
-	anchorRunning.value = false
-})
+}
+
+onHide(stopPageChecks)
+onUnload(stopPageChecks)
 
 function onUserTouch() {
 	pokeRecall()
@@ -147,9 +133,6 @@ watch(
 	() => (session.task ? session.task.current_step : ''),
 	() => {
 		animTick.value += 1
-		// 换了一步，5 分钟锚点也重新起算
-		anchorRunning.value = true
-		startAnchor()
 		resetRecall()
 	}
 )
@@ -189,17 +172,6 @@ async function onHeavy() {
 	await session.resize('smaller')
 }
 
-async function onAnchorExit() {
-	anchorDue.value = false
-	await onExit()
-}
-
-function onAnchorAgain() {
-	anchorDue.value = false
-	anchorRunning.value = true
-	anchorAgain()
-}
-
 function toggleDnd() {
 	settings.toggleDnd()
 	if (settings.dnd) stopRecall()
@@ -217,7 +189,6 @@ function backToChat() {
 	if (leaving) return
 	leaving = true
 	stopRecall()
-	stopAnchor()
 	const pages = getCurrentPages()
 	if (pages && pages.length > 1) {
 		uni.navigateBack({ delta: 1 })
@@ -299,22 +270,6 @@ function backToChat() {
 		opacity: 1;
 		transform: translateY(0);
 	}
-}
-
-.anchor-row {
-	display: flex;
-	justify-content: center;
-	padding: 0 0 20rpx;
-}
-
-.tiny-btn {
-	margin: 0 10rpx;
-	padding: 10rpx 24rpx;
-	border-radius: 999rpx;
-	border: 1rpx solid var(--line);
-	background-color: var(--surface);
-	color: var(--muted);
-	font-size: 22rpx;
 }
 
 .bottom {

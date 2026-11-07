@@ -1,55 +1,72 @@
-import { ref, onUnmounted } from 'vue'
+import { ref } from 'vue'
 
 /**
- * 隐形番茄钟：5 分钟轻承诺的到点提醒（策划书 8-第三步）
- *
- * 关键点是「不显示倒计时」——界面上没有任何数字在跑，
- * 只有到点的那一刻，屏幕下方轻轻出现两个很小的按钮：
- *   就到这吧 / 再来 5 分钟
- * 它不挽留、不说「再坚持一下」，选择权完全交给用户。
- *
- * 同时这也是唯一会打断用户的东西，所以：
- *  - 页面 onHide 时停表（切后台不烧时间）
- *  - 用户一旦点「到这儿」就彻底停掉
+ * 会话级五分钟轻承诺。后台按截止时间继续累计，不依赖后台timeout；
+ * 回到前台再检查并显示选择。此实例由session持有，不随步骤或页面重建。
  */
 export function useFiveMinuteAnchor(options = {}) {
 	const durationMs = options.durationMs || 5 * 60 * 1000
+	const now = options.now || Date.now
+	const setTimeoutFn = options.setTimeoutFn || setTimeout
+	const clearTimeoutFn = options.clearTimeoutFn || clearTimeout
+	const onChange = options.onChange || (() => {})
 	const due = ref(false)
+	const deadline = ref(null)
+	let foreground = false
 	let timer = null
+	let generation = 0
 
 	function clear() {
-		if (timer) {
-			clearTimeout(timer)
-			timer = null
+		generation += 1
+		if (timer !== null) clearTimeoutFn(timer)
+		timer = null
+	}
+
+	function publish() {
+		onChange({ due: due.value, deadline: deadline.value })
+	}
+
+	function check() {
+		clear()
+		due.value = foreground && deadline.value !== null && now() >= deadline.value
+		if (foreground && deadline.value !== null && !due.value) {
+			const version = generation
+			timer = setTimeoutFn(() => {
+				if (version !== generation) return
+				timer = null
+				check()
+			}, Math.max(0, deadline.value - now()))
 		}
+		publish()
 	}
 
-	/** 开始一个 5 分钟锚点 */
-	function start() {
-		clear()
-		due.value = false
-		timer = setTimeout(() => {
-			timer = null
-			due.value = true
-		}, durationMs)
+	function begin() {
+		deadline.value = now() + durationMs
+		check()
+		return true
 	}
 
-	/** 「再来 5 分钟」 */
-	function again() {
-		start()
+	return {
+		due,
+		deadline,
+		start() {
+			if (deadline.value !== null) return false
+			return begin()
+		},
+		again() {
+			if (!due.value) return false
+			return begin()
+		},
+		stop() {
+			clear()
+			deadline.value = null
+			due.value = false
+			publish()
+		},
+		setForeground(value) {
+			foreground = !!value
+			check()
+		},
+		check
 	}
-
-	/** 停表（切后台 / 退出任务） */
-	function stop() {
-		clear()
-	}
-
-	/** 收起提示但不停表（用户已经看到了） */
-	function dismiss() {
-		due.value = false
-	}
-
-	onUnmounted(stop)
-
-	return { due, start, again, stop, dismiss }
 }

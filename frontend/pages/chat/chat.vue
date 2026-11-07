@@ -38,6 +38,8 @@
 			</view>
 		</scroll-view>
 
+		<FiveMinuteChoice />
+
 		<!-- 5 件小事 + 回执入口 -->
 		<view class="quick-wrap">
 			<QuickActions @action="onQuick" />
@@ -88,6 +90,7 @@ import ChatBubble from '@/components/ChatBubble.vue'
 import QuickActions from '@/components/QuickActions.vue'
 import SoftLine from '@/components/SoftLine.vue'
 import TabBar from '@/components/TabBar.vue'
+import FiveMinuteChoice from '@/components/FiveMinuteChoice.vue'
 
 import { useSession } from '@/store/session.js'
 import { useSettings } from '@/store/settings.js'

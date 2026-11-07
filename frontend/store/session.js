@@ -4,6 +4,7 @@ import * as api from '@/api/index.js'
 import { displayLabel, safeDuration } from '@/utils/format.js'
 import { stepKey } from '@/utils/stepIdentity.js'
 import { createStartReminderPoller } from '@/utils/startReminderPoller.js'
+import { useFiveMinuteAnchor } from '@/composables/useFiveMinuteAnchor.js'
 
 /**
  * 会话 store：整个小程序的单一状态源。
@@ -73,7 +74,10 @@ export const useSession = defineStore('session', {
 		/** 最近一次错误文案 */
 		lastError: '',
 		/** 冷启动是否已 open 过 */
-		opened: false
+		opened: false,
+		/** 轻承诺截止时间与前台到期选择，和步骤耗时/预约/无操作召回独立 */
+		anchorDeadline: null,
+		anchorDue: false
 	}),
 
 	actions: (state) => {
@@ -82,6 +86,24 @@ export const useSession = defineStore('session', {
 
 		function uid() {
 			return user.current()
+		}
+
+		let anchorOwner = null
+		const fiveMinuteAnchor = useFiveMinuteAnchor({ onChange(snapshot) {
+			if (anchorOwner !== null && anchorOwner !== uid()) {
+				anchorOwner = null
+				fiveMinuteAnchor.stop()
+				return
+			}
+			state.anchorDeadline = snapshot.deadline
+			state.anchorDue = snapshot.due
+		} })
+
+		function syncFiveMinuteAnchor() {
+			if (state.state !== 'executing' || !state.task || anchorOwner !== uid()) {
+				anchorOwner = null
+				fiveMinuteAnchor.stop()
+			}
 		}
 
 		function pushCat(reply) {
@@ -135,6 +157,7 @@ export const useSession = defineStore('session', {
 				state.navIntent = 'chat'
 			}
 			reminderPoller.refresh()
+			syncFiveMinuteAnchor()
 		}
 
 		/** 包一层错误处理：网络/后端错误只推一条系统小字，不打断对话 */
@@ -173,6 +196,15 @@ export const useSession = defineStore('session', {
 			displayLabel,
 			startReminderChecks() { reminderPoller.start() },
 			stopReminderChecks() { reminderPoller.stop() },
+			setFiveMinuteForeground(visible) {
+				syncFiveMinuteAnchor()
+				fiveMinuteAnchor.setForeground(visible)
+			},
+			continueFiveMinutes() {
+				if (state.busy || state.state !== 'executing' || !state.task) return false
+				syncFiveMinuteAnchor()
+				return fiveMinuteAnchor.again()
+			},
 
 			/** 冷启动：打开会话（会拿到跨天交接提示 / 上次做到哪） */
 			async open(force = false) {
@@ -218,8 +250,15 @@ export const useSession = defineStore('session', {
 					return
 				}
 				if (action.type === 'commit') {
-					const reply = await run(() => api.commit(uid(), action.agree))
-					if (reply) applyReply(reply)
+					const requestUser = uid()
+					const reply = await run(() => api.commit(requestUser, action.agree))
+					if (reply && requestUser === uid()) {
+						applyReply(reply)
+						if (action.agree && state.state === 'executing' && state.task) {
+							anchorOwner = uid()
+							fiveMinuteAnchor.start()
+						}
+					}
 					return
 				}
 				if (action.type === 'step_complete') {
@@ -278,6 +317,8 @@ export const useSession = defineStore('session', {
 				state.navIntent = 'chat'
 				pushCat(reply)
 				reminderPoller.refresh()
+				syncFiveMinuteAnchor()
+				return reply
 			},
 
 			/** 拉一次今日小结（回执页用） */
@@ -301,6 +342,7 @@ export const useSession = defineStore('session', {
 					state.task = data.task || null
 					syncStepTimer(state.task)
 					reminderPoller.refresh()
+					syncFiveMinuteAnchor()
 					return data
 				} catch (e) {
 					return null

@@ -1,12 +1,14 @@
 <script setup>
 /**
- * 应用入口：只做两件冷启动的事 —— 恢复身份、读本地偏好。
+ * 应用入口：恢复身份、本地偏好，并管理轻承诺的应用前后台状态。
  * 页面自己的 onShow 里还会再 load 一次（幂等），保证直接从某个页面进来也不会缺状态。
  */
-import { onLaunch } from '@dcloudio/uni-app'
+import { onHide, onLaunch, onShow } from '@dcloudio/uni-app'
+import { useSession } from '@/store/session.js'
 import { useUser } from '@/store/user.js'
 import { useSettings } from '@/store/settings.js'
 
+const session = useSession()
 const user = useUser()
 const settings = useSettings()
 
@@ -14,6 +16,9 @@ onLaunch(() => {
 	user.ensure()
 	settings.load()
 })
+// 应用切后台与页面切换不同：后台保留截止时间，回前台才显示到期选择。
+onShow(() => session.setFiveMinuteForeground(true))
+onHide(() => session.setFiveMinuteForeground(false))
 </script>
 
 <style>

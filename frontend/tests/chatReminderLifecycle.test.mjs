@@ -20,7 +20,7 @@ async function setup() {
 		'@/utils/systemInfo.js': { getStatusBarHeight: () => 0 },
 		'@/utils/voice.js': { explainVoiceUnavailable() {}, isVoiceSupported: () => false, listenOnce() {} }
 	}
-	for (const name of ['CatBuddy', 'ChatBubble', 'QuickActions', 'SoftLine']) mocks[`@/components/${name}.vue`] = { default: {} }
+	for (const name of ['CatBuddy', 'ChatBubble', 'QuickActions', 'SoftLine', 'TabBar', 'FiveMinuteChoice']) mocks[`@/components/${name}.vue`] = { default: {} }
 	await loadFrontend('pages/chat/chat.vue', { mocks })
 	return { first, next, hooks, counts }
 }
