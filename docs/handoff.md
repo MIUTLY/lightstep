@@ -1,3 +1,32 @@
+# 最新交接：统一过滤对外AI展示文案
+
+2026-11-07，独立分支fix/public-ai-text，基于最新main 412ebdc（#16已合并）。实施[3b1ba659887427d32bde796620f6cbc6aeefd917](https://github.com/MIUTLY/lightstep/commit/3b1ba659887427d32bde796620f6cbc6aeefd917)。本轮未合并或部署。
+
+依据：用户要求返回前端时去掉“（本次对话：…）”等不该展示的内部说明。核对发现还有后端自己拼接的“（本次内容：动作明细）”；动作明细必须保留，不能为了去括号丢掉森林范围。
+
+实际改动：新增backend/app/public_text.py及PublicJSONResponse统一JSON展示出口，处理reply/current_step/question/summary/feedback/title/scope和实际动作文字列表。删除完整中英文内部标签括号段与think/thinking块，支持嵌套；保留题号、字数、数量等有效括号。current_step的本次内容标签改为换行，保留全部要求完成的动作；部分完成仍明示剩余内容。backend/app/main.py配置默认响应类，使正常返回、重开及旧幂等响应均过滤，不修改存储或原始用户输入/操作命令/上下文/ID/完成集合。llm.py过滤真实闲聊正文并拒绝过滤后为空的回复；prompts.py要求只输出用户可见话语，不用固定模板兜底。
+
+测试与文档：新增test_public_text.py 7项回归；更新test_task_forest.py的HTTP文案断言，完成范围与进度断言仍保留；test_memo.py的跨天HTTP对比区分展示投影与内部原文。同步根README、backend/README、docs/api.md、requirements、task-forest，并新增[public-ai-text.md](public-ai-text.md)。未改frontend或backend/static，不迁移用户数据库。
+
+验证：backend目录运行：
+```bash
+python -m unittest discover -s . -p 'test_*.py'
+python smoke_test.py
+```
+本云环境沿用仓库外TestClient selector辅助，实际根目录命令：
+```bash
+PYTHONDONTWRITEBYTECODE=1 PYTHONPATH=/workspace/work/pr8-runtime:/workspace/work:backend timeout 90s python -m unittest discover -s backend -p 'test_*.py'
+PYTHONDONTWRITEBYTECODE=1 PYTHONPATH=/workspace/work/pr8-runtime:/workspace/work:backend timeout 30s python backend/smoke_test.py
+git diff --check
+```
+最终160项通过（40.223s，原153+新增7），隔离SQLite冒烟、Python AST与diff检查通过。覆盖内部标签、嵌套/中英文括号、think块、有效任务约束保留、父任务明细保留、剩余动作保留、原始输入与标识不变、已有/重放HTTP响应过滤、纯内部AI回复明确失败；既有AI失败、范围澄清、森林切换、任务完成/中断/跨天和存储边界回归仍通过。测试仅隔离模型/HTTP替身，未执行真实供应商和微信验收。
+
+限制与前端交接：使用返回的reply/current_step等展示字段，勿把command/context/answers/original_input/plan/nodes原始数据直接渲染或从文案推算step_id。已知标签过滤不是任意内部语言的语义识别，未闭合片段及无标签普通括号不猜测删除；其他实际样例后续补规则。前端换行及微信排版、供应商真实输出仍待联调。本轮没有改变任务进度或轻重对应关系，不自动合并新PR。
+
+---
+
+以下为历史交接。
+
 # 最新交接：恢复真实AI闲聊，把任务澄清放在专注前
 
 2026-11-07。独立分支fix/chat-and-pre-focus-clarification，基于最新main b6b9d00（#15已合并为29488e7，此后主线仅修改.env.example）。实施[9ceb962eb02a75a166fbc93cf0ae7fc8008d467e](https://github.com/MIUTLY/lightstep/commit/9ceb962eb02a75a166fbc93cf0ae7fc8008d467e)。本轮不自动合并/部署。

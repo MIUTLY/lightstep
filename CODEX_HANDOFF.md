@@ -1,3 +1,5 @@
+> 最新任务：统一过滤对外AI展示文案，去掉明确内部括号/思考标签，保留任务约束与实际动作。实施3b1ba659887427d32bde796620f6cbc6aeefd917，160项回归与隔离冒烟通过；接口字段/身份/存储不变，仅展示投影。见[public-ai-text.md](docs/public-ai-text.md)与[handoff](docs/handoff.md)。本轮未改前端，未合并/部署；微信排版和真实供应商输出待验收。
+
 > 最新修复：真实AI闲聊分流、对话页澄清任务范围后才进入专注，实施9ceb962eb02a75a166fbc93cf0ae7fc8008d467e；153项回归、8项最终专项和隔离冒烟通过。前端必须focus非空才跳转，专注页不保留常规询问输入。最新主线.env.example疑似密钥已在分支恢复为空，请维护者轮换旧密钥。本轮只改后端与文档，未合并/部署。接口见[对话与澄清](docs/chat-and-clarification.md)，完整测试/剩余项见[handoff](docs/handoff.md)。
 
 > 最新任务（2026-11-07）：取消全部任务计时，未完成跨天保留，整项完成移出备忘录；回执/手帐长期保留。本轮独立分支refactor/manual-task-lifecycle，实施[5cd6a1e7c5a148976d443be39bb148c577a7ef89](https://github.com/MIUTLY/lightstep/commit/5cd6a1e7c5a148976d443be39bb148c577a7ef89)；145项后端回归与隔离冒烟通过。#10已因产品取消而关闭（未合并，分支保留）。前端计时/UI删除、日期恢复和本地保存仍待队友接入。接口见[task-lifecycle.md](docs/task-lifecycle.md)，变更、测试与未验证项见[handoff.md](docs/handoff.md)。本轮尚未合并或部署。
