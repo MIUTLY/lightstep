@@ -1,3 +1,5 @@
+> 最新行为：整项完成即从items移除，不返回已完成列表；回执/手帐长期保留。取消全部任务计时，跨天恢复及新增字段见[task-lifecycle.md](task-lifecycle.md)。
+
 # 今日备忘录与独立任务森林接口
 
 本轮以main ce27b68为基础，独立分支feat/today-memo，复用真实AI和forest_v1。主流程为真实AI识别多个任务 → 今日备忘录 → 用户选择 → 专注执行 → 本轮回执 → 当天全部完成的手帐事件。前端代码未修改，需要按此协议接入。
@@ -21,14 +23,14 @@
 | action | 其他字段 | 效果 |
 |---|---|---|
 | intake | text | AI提取并追加当日清单，不开始专注 |
-| reorder | date、revision、item_ids | item_ids必须恰好包含该日全部项（含已完成项），仅改变顺序 |
+| reorder | date、revision、item_ids | item_ids必须恰好包含该日全部未完成项，仅改变顺序 |
 | select | item_id；可选answer | 生成/读取对应森林并开始专注；歧义返回needs_clarification及问题，再用新ID提交answer |
 | resize | session_id、step_id、direction(smaller/bigger) | 对应父子关系逐档调整，不改变完成集合 |
 | complete | session_id、step_id | 完成当前展示范围；整项完成才结束会话及划掉该项 |
 | end | session_id | 中途结束本轮，保留森林和进度，返回备忘录，不自动重启 |
 | ack | event_id | 前端已处理并持久化该事件后确认，重复确认安全 |
 
-GET /api/today?user_id=demo返回今日清单，可用date=YYYY-MM-DD读取保留的某日清单。GET /api/session/state、POST /api/session/open在有备忘录数据时返回相同主流程状态，不触发旧单任务跨天清理。
+GET /api/today?user_id=demo返回当天或恢复的未完成清单，可用date=YYYY-MM-DD读取保留的某日清单。GET /api/session/state、POST /api/session/open在有备忘录数据时返回相同主流程状态，不触发旧单任务跨天清理。
 
 响应有state(memo/executing)、revision、date、items、focus、suggested_item_id、reply、all_completed、events。没有专注时reply询问第一个未完成任务；不会自动选择。focus带item_id、session_id、scope、当前step和progress。新森林从中档开始；恢复已生成森林保留上次节点和档位。
 
@@ -50,7 +52,7 @@ GET不会消费事件。前端必须以event.id作本地唯一键幂等保存，
 
 新增memo_state、memo_operations两表，不改写旧active_task、handoff或旧森林。每用户备忘录状态在SQLite事务内按revision比较并更新；AI请求在事务外，返回后再校验，操作日志、任务状态和事件一起提交。单个用户同时只允许一个专注；正在专注时排序不会切换任务。选择其他任务需先显式end。
 
-日期按Asia/Shanghai划分。跨天不自动清理未完成清单或专注；当前日可以为空，旧日可通过date查询继续处理。全天完成状态按清单归属日计算。其他时区、自定义日界限或跨日任务移动尚未定义，不在本轮猜测迁移。
+日期按Asia/Shanghai划分。跨天不自动清理未完成清单或专注；当前日无未完成任务时自动返回最近未完成清单，专注中优先返回其归属日；available_dates列出所有未完成清单日期，旧日可通过date查询继续处理。全天完成状态按清单归属日计算。其他时区、自定义日界限或跨日任务移动尚未定义，不在本轮猜测迁移。
 
 原单任务接口保留兼容，旧数据不推测转换。旧/chat调用需显式workflow=legacy；新主流程前端必须迁移默认/chat的请求和响应。旧active_task仍存在时选择备忘录任务返回409，请先按旧流程处理旧任务；两类执行之间有事务保护。旧独立生成/轻重接口不应用来操作新备忘录的森林。
 

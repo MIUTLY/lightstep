@@ -56,7 +56,7 @@ def chat(req: ChatRequest):
                         {'action':'intake','text':req.message})
 
 
-@app.post("/api/reminders/poll")
+@app.post("/api/reminders/poll", deprecated=True)
 def poll_reminders(req: UserRequest):
     return services.poll_start_reminder(req.user_id)
 

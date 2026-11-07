@@ -53,12 +53,13 @@ class StepPlanTests(unittest.TestCase):
     def state(self):
         return self.client.get("/api/session/state", params={"user_id": self.uid}).json()
 
-    def test_fast_opening_does_not_skip_learning_words(self):
+    def test_fast_opening_keeps_manual_level_and_next_action(self):
         self.start()
         reply = self.post("/api/step/complete", duration_ms=3000)
         self.assertEqual(reply["state"], "executing")
         self.assertIn("过 5 个单词", reply["task"]["current_step"])
-        self.assertIn("把记不住的标出来", reply["task"]["current_step"])
+        self.assertNotIn("把记不住的标出来", reply["task"]["current_step"])
+        self.assertEqual(reply["task"]["granularity"], "normal")
         self.assertEqual(self.db.get_active_task(self.uid)["current_idx"], 1)
 
     def test_resize_does_not_move_cursor_or_reopen_completed_prefix(self):

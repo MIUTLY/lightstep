@@ -189,23 +189,22 @@ class ForestTests(unittest.TestCase):
         result = self.post('chat', message='轻一点是什么意思？')
         self.assertTrue(result['task']['current_step'].startswith('中任务1（本次内容：'))
 
-    def test_resize_before_start_preserves_state_and_appointment(self):
+    def test_resize_before_start_preserves_state_without_appointment(self):
         self.post('chat', message='写论文')
-        due = self.post('task/choose_time', when='in_5_minutes')['task']['start_due_at']
         result = self.resize('smaller')
         self.assertEqual(result['state'], 'ready')
-        self.assertEqual(result['start_due_at'], due)
+        self.assertIsNone(result['start_due_at'])
         self.post('task/choose_time', when='now')
         self.assertEqual(self.resize('bigger')['state'], 'committing')
 
-    def test_handoff_roundtrip_keeps_forest_progress_and_current_scope(self):
+    def test_next_day_keeps_forest_progress_and_current_scope(self):
         self.begin(); self.resize('smaller'); self.complete(); self.resize('bigger')
         before = self.task()
         with self.db._conn() as c:
             c.execute('UPDATE users SET last_seen=? WHERE user_id=?', ((datetime.now().date() - timedelta(days=1)).isoformat(), self.uid))
         offered = self.post('session/open')
         self.assertIn('接着', offered['reply'])
-        resumed = self.post('handoff/resume')['task']
+        resumed = offered['task']
         self.assertEqual(resumed, before)
         self.assertEqual(self.done_texts(), ['轻任务1'])
 

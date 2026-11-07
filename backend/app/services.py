@@ -15,7 +15,7 @@ from . import persona
 from .db import db
 from .decompose import domain_of
 from .ending_intent import ending_intent
-from .granularity import judge, shift_level, level_name
+from .granularity import shift_level, level_name
 from . import step_plan, task_forest
 from .llm import llm, AIError, Clarification, invalid_response
 from .schemas import Reply, TaskView
@@ -33,7 +33,7 @@ _AFK = ["手机", "视频", "打游戏", "玩游戏", "抖音", "短视频", "�
 _REST = ["什么都不想干", "不想干", "今天休息", "放假", "躺平", "摆烂", "休息一天", "今天不想", "不干了"]
 _SWITCH = ["换个任务", "换成", "改做", "不做这个", "换一个", "换件事", "换个事"]
 _CONTINUE = ["接着", "继续"]
-_START_BUTTONS = ["现在开始", "5分钟后", "10分钟后", "今天不做"]
+_START_BUTTONS = ["现在开始", "今天不做"]
 
 _LEAD_FILLERS = sorted(
     ["那我试试", "我试试", "我试", "试试看", "试着", "我想", "我想做", "我要", "我准备", "我打算",
@@ -119,7 +119,7 @@ def _task_view(task: dict) -> TaskView:
         state=task["state"],
         plan_format="forest_v1" if plan is not None else "legacy",
         **extra,
-        start_due_at=db.get_start_due_at(task["user_id"]) if task["state"] == "ready" else None,
+        start_due_at=None,  # Deprecated compatibility field; task timers are retired.
     )
 
 
@@ -173,14 +173,6 @@ def _is_goal(text: str) -> bool:
     return any(w in text for w in _GOAL_INTENT)
 
 
-def _is_recent(date_str: str) -> bool:
-    try:
-        d = datetime.strptime(date_str, "%Y-%m-%d").date()
-    except Exception:
-        return False
-    return (datetime.now().date() - d).days <= 7
-
-
 def _weekly_milestone(visit_dates: list) -> bool:
     week_start = (datetime.now().date() - timedelta(days=7)).isoformat()
     recent = {d for d in (visit_dates or []) if d >= week_start}
@@ -202,29 +194,25 @@ def handle_open(user_id: str) -> Reply:
 def _handle_open(user_id: str) -> Reply:
     info = db.open_session(user_id)
     task = db.get_active_task(user_id)
-    due = db.due_reminders(user_id) + db.take_due_start_reminder(user_id)
 
     handoff_reply = None
     if not task and info["same_day_opens"] == 1:
         handoff = db.get_handoff(user_id)
         if handoff:
-            if not _is_recent(handoff["saved_date"]):
-                db.clear_handoff(user_id)
-            else:
-                handoff_reply = persona.handoff_offer(_handoff_last_step(handoff))
+            handoff_reply = persona.handoff_offer(_handoff_last_step(handoff))
 
     if task:
         step = _current_step_text(task)
         return Reply(reply=persona.resume(step), state=task["state"], task=_task_view(task),
-                     buttons=_buttons_for(task), due_reminders=due)
+                     buttons=_buttons_for(task))
 
     if handoff_reply:
-        return Reply(reply=handoff_reply, state="idle", buttons=["接着做", "翻篇"], due_reminders=due)
+        return Reply(reply=handoff_reply, state="idle", buttons=["接着做", "翻篇"])
 
     msgs = [persona.greet(info["same_day_opens"], info["open_count"])]
     if info["new_day"] and _weekly_milestone(info["visit_dates"]):
         msgs.append(persona.milestone_week())
-    return Reply(reply=" ".join(msgs), state="idle", due_reminders=due, buttons=[])
+    return Reply(reply=" ".join(msgs), state="idle", buttons=[])
 
 
 def handle_chat(user_id: str, message: str) -> Reply:
@@ -247,17 +235,15 @@ def handle_chat(user_id: str, message: str) -> Reply:
     db.ensure_user(user_id)
     task = db.get_active_task(user_id)
     if not text:
-        return Reply(reply=persona.afk_due(), state=task["state"] if task else "idle",
+        return Reply(reply=persona.available(), state=task["state"] if task else "idle",
                      task=_task_view(task) if task else None, buttons=_buttons_for(task))
     return _chat_reply(user_id, text)
 
 
 def poll_start_reminder(user_id: str) -> Reply:
-    db.ensure_user(user_id)
-    due = db.take_due_start_reminder(user_id)
-    task = db.get_active_task(user_id)
-    return Reply(reply="", state=task["state"] if task else "idle",
-                 task=_task_view(task) if task else None, buttons=_buttons_for(task), due_reminders=due)
+    # Reject before any database access, including daily rollover.
+    raise HTTPException(status_code=410, detail={
+        "code": "TASK_TIMERS_REMOVED", "message": "预约提醒已取消，请停止轮询；任务由你手动开始。"})
 
 
 def _chat_reply(user_id: str, text: str) -> Reply:
@@ -397,22 +383,17 @@ def retry_generation(user_id, generation_id, answer=None):
 
 def handle_choose_time(user_id: str, when: str) -> Reply:
     _validate_choice(when, ("now", "in_5_minutes", "in_10_minutes", "later", "not_today"))
+    if when in ("in_5_minutes", "in_10_minutes", "later"):
+        raise HTTPException(status_code=410, detail={
+            "code": "TASK_TIMERS_REMOVED", "message": "预约开始已取消，请选择现在开始或今天不做。"})
     task = _require_task_state(user_id, ("ready",))
     if not task:
-        return Reply(reply=persona.afk_due(), state="idle")
+        return Reply(reply=persona.available(), state="idle")
     if when == "now":
         db.update_active_task(user_id, state="committing")
         task = db.get_active_task(user_id)
         return Reply(reply=persona.commit_prompt(), state="committing", task=_task_view(task),
                      buttons=["行", "再想想"])
-    if when == "later":
-        return Reply(reply=persona.ask_delay(), state="ready", task=_task_view(task), buttons=_START_BUTTONS)
-    if when in ("in_5_minutes", "in_10_minutes"):
-        minutes = 5 if when == "in_5_minutes" else 10
-        if not db.schedule_task_start(user_id, minutes):
-            raise HTTPException(status_code=409, detail={"code": "INVALID_TASK_STATE", "message": "任务已变化，请刷新后再选时间。"})
-        return Reply(reply=persona.scheduled(f"{minutes}分钟后"), state="ready",
-                     task=_task_view(db.get_active_task(user_id)), buttons=_START_BUTTONS)
     # not_today
     db.clear_active_task(user_id)
     return Reply(reply=persona.rest_day(), state="idle")
@@ -423,7 +404,7 @@ def handle_commit(user_id: str, agree: bool) -> Reply:
         raise HTTPException(status_code=422, detail="agree必须为布尔值。")
     task = _require_task_state(user_id, ("committing",))
     if not task:
-        return Reply(reply=persona.afk_due(), state="idle")
+        return Reply(reply=persona.available(), state="idle")
     if agree:
         db.update_active_task(user_id, state="executing")
         step = _current_step_text(task)
@@ -435,31 +416,24 @@ def handle_commit(user_id: str, agree: bool) -> Reply:
                  buttons=_START_BUTTONS)
 
 
-def handle_step_complete(user_id: str, duration_ms: int, step_id: str | None = None) -> Reply:
-    if type(duration_ms) is not int or duration_ms < 0:
+def handle_step_complete(user_id: str, duration_ms: int | None = None, step_id: str | None = None) -> Reply:
+    if duration_ms is not None and (type(duration_ms) is not int or duration_ms < 0):
         raise HTTPException(status_code=422, detail="duration_ms必须为非负整数。")
     task = _require_task_state(user_id, ("executing",))
     if not task:
-        return Reply(reply=persona.afk_due(), state="idle")
+        return Reply(reply=persona.available(), state="idle")
 
     _validate_step_id(task, step_id)
     plan = _forest_plan(task)
     if plan is not None:
-        return _complete_forest_step(user_id, task, plan, duration_ms)
-
-    direction = judge(duration_ms)
-    domain = domain_of(task["title"])
-    if direction == "up":
-        db.record_friction(user_id, domain, "smooth")
-    elif direction == "down":
-        db.record_friction(user_id, domain, "stuck")
+        return _complete_forest_step(user_id, task, plan)
 
     steps_done = task["steps_done"] + 1
     db.record_step_done(user_id, task["title"])
     db.update_active_task(user_id, steps_done=steps_done)
 
     levels = step_plan.ensure_plan(task)
-    new_level = task["level"] if direction == "keep" else shift_level(task["level"], direction)
+    new_level = task["level"]
     next_idx = step_plan.next_cursor(levels, task["current_idx"])
     if step_plan.is_finished(levels, next_idx):
         return _complete(user_id, task, steps_done)
@@ -469,12 +443,7 @@ def handle_step_complete(user_id: str, duration_ms: int, step_id: str | None = N
     task2 = db.get_active_task(user_id)
     step = _current_step_text(task2)
 
-    if direction == "up":
-        reply = f"{persona.step_next_aside('up')} 下一步：「{step}」"
-    elif direction == "down":
-        reply = f"{persona.step_next_aside('down')} 下一步：「{step}」"
-    else:
-        reply = f"好。下一步：「{step}」"
+    reply = f"好。下一步：「{step}」"
 
     notes = db.get_pending_notes(user_id)
     if notes:
@@ -496,7 +465,7 @@ def handle_resize(user_id: str, direction: str, step_id: str | None = None) -> R
     _validate_choice(direction, ("smaller", "bigger"))
     task = _require_task_state(user_id, ("ready", "committing", "executing"))
     if not task:
-        return Reply(reply=persona.afk_due(), state="idle")
+        return Reply(reply=persona.available(), state="idle")
 
     _validate_step_id(task, step_id)
     plan = _forest_plan(task)
@@ -543,13 +512,9 @@ def _save_forest(task: dict, plan: dict, *, completed=False, finished=False) -> 
                 steps_done=task["steps_done"] + int(completed))
 
 
-def _complete_forest_step(user_id: str, task: dict, plan: dict, duration_ms: int) -> Reply:
+def _complete_forest_step(user_id: str, task: dict, plan: dict) -> Reply:
     finished = task_forest.complete(plan)
     updated = _save_forest(task, plan, completed=True, finished=finished)
-    # 耗时仍可沉淀摩擦反馈，但不覆盖主动选择或默认中档，也不切到独立清单。
-    direction = judge(duration_ms)
-    if direction != "keep":
-        db.record_friction(user_id, domain_of(task["title"]), "smooth" if direction == "up" else "stuck")
     if finished:
         return Reply(reply="这次拆出的步骤做完了。先到这。", state="done",
                      summary=_summary_text(db.get_today_summary(user_id)))

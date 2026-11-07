@@ -1,3 +1,58 @@
+# 最新交接：取消任务计时，跨天保留未完成任务，完成移出备忘录
+
+2026-11-07。基于最新main `626ff302d0d5ad874f9895628cc6e17c13338957`（#14已合并），独立分支`refactor/manual-task-lifecycle`。业务与协议提交：[5cd6a1e7c5a148976d443be39bb148c577a7ef89](https://github.com/MIUTLY/lightstep/commit/5cd6a1e7c5a148976d443be39bb148c577a7ef89)。本轮不自动合并或部署。
+
+## 修改依据与行为
+
+用户先要求取消任务计时，随后明确预约和无操作召回也全部取消；补充未完成任务第二天保留、完成一项删一项，最后确认回执和手帐仍长期保留、重复使用。按用户既定分工只改后端和文档，前端由队友负责。
+
+- 删除任务耗时快慢判断、耗时摩擦记录与自动调档，普通手动开始/完成/结束和主动轻重切换保留。旧duration_ms可省略，合法旧值忽略，非法类型/负数仍422。
+- 删除预约创建和到期提取逻辑、五分钟承诺文案。预约选项及轮询接口返回410 TASK_TIMERS_REMOVED；start_due_at=null、due_reminders=[]。旧提醒表不破坏性删除；网络超时和业务时间戳保留。
+- 旧流程不再跨天清空当前任务，零步任务也保留，旧交接不因超过七天删除。新备忘录重开优先返回专注所属日，否则当天或最近未完成清单；新增today_date/available_dates/today_all_completed，保留每项原归属日及顺序，不复制或重置森林。
+- 整项完成从days[date].items移除，已完成森林不再作为待办保存；保留最少id/title/scope事实及回执/手帐事件用于防重与准确日汇总。中途退出、完成小步骤都不移除整项。排序只接受该日剩余项，已完成项不再作为悬浮桌宠插入锚点。
+- 回执/手帐事件继续使用稳定ID；ack不删除本地文件。旧已完成项读取兼容转换，下一次成功写事务保存新结构，不影响未完成进度或重复生成事件。
+
+## 修改文件
+
+- 后端：app/services.py、db.py、granularity.py、config.py、persona.py、schemas.py、main.py、memo.py，backend/.env.example及smoke_test.py。
+- 回归：test_start_reminders.py将原14项预约功能测试替换为8项停用/手动完成/跨天兼容测试；test_memo.py新增6项生命周期回归，test_focus_capture.py新增1项已完成锚点回归；更新test_ai_generation.py、test_ending_intent.py、test_step_plan.py、test_task_forest.py的旧规则断言和历史数据准备。
+- 文档：AGENTS.md、根README、backend/README、requirements、api、architecture、task-forest、today-memo、focus-capture；新增[task-lifecycle.md](task-lifecycle.md)，含请求/返回示例、失败处理、迁移和前端删减清单。本交接与根CODEX_HANDOFF随后记录真实实施SHA。
+- 未改任何frontend/或backend/static/文件，未提交真实.env、密钥或数据库。
+
+## 测试命令与结果
+
+后端目录标准命令：
+
+```bash
+python -m unittest discover -s . -p 'test_*.py'
+python smoke_test.py
+```
+
+本云环境沿用仓库外TestClient selector唤醒辅助，实际在根目录执行：
+
+```bash
+PYTHONDONTWRITEBYTECODE=1 PYTHONPATH=/workspace/work/pr8-runtime:/workspace/work:backend timeout 90s python -m unittest discover -s backend -p 'test_*.py'
+PYTHONDONTWRITEBYTECODE=1 PYTHONPATH=/workspace/work/pr8-runtime:/workspace/work:backend timeout 30s python backend/smoke_test.py
+git diff --check
+```
+
+最终**145项通过，38.517s**；隔离SQLite冒烟、Python AST及diff检查通过。原144项中14项旧预约测试替换为8项停用测试，再新增7项生命周期测试，共145。测试使用显式注入模型/HTTP替身与临时SQLite，不调用真实供应商、不连接用户生产数据。出现依赖的弃用提示，不影响结果。
+
+覆盖：无耗时手动完成、耗时不会调档/记摩擦、未开始拒绝完成、旧step_id拒绝重复推进、预约410无写入、旧提醒重开/重启不投递、旧任务跨天零步及有进度保留、十题做五题结束后翌日重开及无AI续做、完成整项移除但其余不变、移除后排序、旧数据兼容、跨日查询/新增任务、昨天完成不误报今天完成、重复请求/事件确认无新增回执或手帐，以及已完成项不能作为插入锚点。既有真实AI失败、森林切换、参数、便签、专注捕获及存储边界回归仍通过。
+
+## 剩余与前端交接
+
+1. 按[task-lifecycle.md](task-lifecycle.md)删除前端轻承诺、预约、无操作召回、耗时上传及相关UI/缓存。网页调试页也有旧计时，未代改；当前不能宣称整款小程序已无计时。
+2. items不再有已完成项，排序只交剩余ID；跨天使用date/today_date和available_dates恢复或切换旧日未完成清单。不能把items为空当作今日完成；手帐依据稳定daily_journal事件，兼容重试响应可能是旧revision，应查当前状态而非恢复旧列表。
+3. 回执/手帐图片与私人留言仍仅客户端持久保存，长期访问、复用、删除和保存失败处理需要前端验收；本轮不改本地文件实现。删除任务不得删除已有回执/手帐。
+4. 日期沿用Asia/Shanghai，任务保留原归属日；新增当日任务不会自动迁移旧日任务。available_dates提供所有未完成日期，前端要确保可访问。
+5. 无真实AI凭据/微信运行环境，真实模型质量、页面清理、前后台/重开和本地文件长期保存未验收。旧history/day_log仅兼容，不新增完成记录页，不做历史数据破坏性删除。
+6. 已关闭取消中的[PR #10](https://github.com/MIUTLY/lightstep/pull/10)，未合并计时功能且未删分支。该分支的TaskCard标签隐藏为独立前端改动，可由前端成员按需提取，不能将整份计时PR重新合入。
+
+---
+
+以下为历史交接；旧计时、跨天清理与完成后划线规则已被上述最新决定替代。
+
 # 最新交接：专注桌宠新增任务的后端支持
 
 2026-11-07，独立分支feat/focus-capture，基于main 1c26b85433e11d734d0a1707013e5d9c1249b7ae（#13已合并）。实施提交[e2ccd906774261b25db51563a9d05dcfab2d0d7c](https://github.com/MIUTLY/lightstep/commit/e2ccd906774261b25db51563a9d05dcfab2d0d7c)。本轮核对未合并分支只有#10，不带入其前端计时。按既定分工只实施后端，前端桌宠及侧边栏限制未实现，不能把本轮当成完整微信功能验收。接口与前端清单见[focus-capture.md](focus-capture.md)。新PR供审查，不沿用此前合并授权自动合并。

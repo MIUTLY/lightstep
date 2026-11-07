@@ -40,7 +40,7 @@ class CommitRequest(UserRequest):
 
 
 class StepCompleteRequest(UserRequest):
-    duration_ms: Annotated[int, Field(strict=True, ge=0)]
+    duration_ms: Annotated[int, Field(strict=True, ge=0)] | None = Field(default=None, deprecated=True, description="兼容旧客户端；已停用，不参与任何进度或粒度判断")
     step_id: Optional[NonEmptyText] = None
 
 
@@ -65,12 +65,12 @@ class TaskView(BaseModel):
     steps_done: int
     granularity: str  # fine | normal | coarse
     state: str       # ready | committing | executing | done
-    step_id: str = ""  # 当前显示动作的稳定标识，计时不能只比较文字
+    step_id: str = ""  # 当前显示动作的稳定标识，用于防止旧请求重复完成
     plan_format: str = "legacy"
     node_id: Optional[str] = None
     parent_id: Optional[str] = None
     remaining_leaf_ids: List[str] = []
-    start_due_at: Optional[str] = None  # 待提醒预约的UTC ISO时间；消费/取消后null，不自动开始
+    start_due_at: Optional[str] = Field(default=None, deprecated=True, description="计时已停用，恒为null")
 
 
 class Reply(BaseModel):
@@ -79,7 +79,7 @@ class Reply(BaseModel):
     buttons: List[str] = []
     task: Optional[TaskView] = None
     notes_to_recall: List[str] = []
-    due_reminders: List[str] = []
+    due_reminders: List[str] = Field(default_factory=list, deprecated=True, description="提醒已停用，恒为空列表")
     summary: Optional[str] = None
     generation: Optional[dict] = None
 

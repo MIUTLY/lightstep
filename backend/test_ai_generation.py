@@ -159,7 +159,8 @@ class AIGenerationTests(unittest.TestCase):
 
     def test_failed_replacement_keeps_scheduled_start_notes_and_day_log(self):
         self.generate()
-        self.post('task/choose_time', when='in_5_minutes')
+        with self.db._conn() as c:
+            c.execute("INSERT INTO task_start_reminders (user_id,due_at,notified) VALUES (?, '2000-01-01T00:00:00', 0)", (self.uid,))
         self.post('note', content='记下此事')
         def tables():
             with self.db._conn() as c:

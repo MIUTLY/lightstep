@@ -4,7 +4,7 @@
 
 # 前端接入约定
 
-完整请求字段与响应结构以运行中的 /docs 为准。本分支含fix/start-reminder-options预约草稿，尚未完成前端行为/微信验收；已合并与待合并状态见根目录CODEX_HANDOFF.md。
+完整请求字段与响应结构以运行中的 /docs 为准。最新计时停用、跨天保留与完成移除协议见[task-lifecycle.md](task-lifecycle.md)；前端页面需另行更新。
 
 ## 地址与身份
 
@@ -21,29 +21,29 @@
 | 打开 | POST /api/session/open | user_id |
 | 输入目标或反馈 | POST /api/chat | user_id、message |
 | 现在开始 | POST /api/task/choose_time | user_id、when=now |
-| 预约开始 | POST /api/task/choose_time | when=in_5_minutes或in_10_minutes |
-| 检查预约 | POST /api/reminders/poll | user_id；有取出并标记的副作用，不自动重试送达 |
-| 确认轻承诺 | POST /api/task/commit | user_id、agree=true |
-| 完成当前步骤 | POST /api/step/complete | user_id、duration_ms |
+| 预约开始（已停用） | POST /api/task/choose_time | when=in_5_minutes/in_10_minutes/later均410 |
+| 检查预约（已停用） | POST /api/reminders/poll | 恒410 TASK_TIMERS_REMOVED，无写入 |
+| 普通开始确认 | POST /api/task/commit | user_id、agree=true |
+| 完成当前步骤 | POST /api/step/complete | user_id、step_id（建议）；duration_ms可省略且已停用 |
 | 主动拆小 | POST /api/step/resize | user_id、direction=smaller |
 | 退出 | POST /api/task/exit | user_id |
 | 记便签 | POST /api/note | user_id、content；与回执私人留言不同 |
 | 恢复展示 | GET /api/session/state | 查询参数 user_id |
 | 存活检查 | GET /api/health | 不代表真实模型供应商已连通 |
 
-Reply 返回 reply、state、task、buttons 等字段。task 包括 title、current_step、steps_done、granularity、state、step_id，以及start_due_at（仅待提醒预约返回UTC ISO时间，消费/取消后为null）。step_id 是当前展示动作的稳定标识：同一步刷新不变，相同文字的不同动作仍有不同标识。计时优先比较 step_id，兼容旧后端时才回退到标题和步骤文字；它不是请求幂等键。客户端成功后用响应替换当前展示；失败时保持原步骤，避免重复完成请求。当前还没有幂等令牌，不要自动重试写操作或允许连点完成。
+Reply 返回 reply、state、task、buttons 等字段。task 包括 title、current_step、steps_done、granularity、state、step_id，以及start_due_at（已停用，恒null）。step_id 是当前展示动作的稳定标识：同一步刷新不变，相同文字的不同动作仍有不同标识。完成时回传step_id校验当前范围；它不是请求幂等键。客户端成功后用响应替换当前展示；失败时保持原步骤，避免重复完成请求。当前还没有幂等令牌，不要自动重试写操作或允许连点完成。
 
 只有服务端决定任务进度；客户端不要用本地数组下标自行推进。steps_done 供内部渲染或猫姿态使用，不等于允许在产品界面展示统计。
 
-## 尚未补齐的接口能力
+## 取消计时与跨天保留
 
-本分支预约草稿支持5/10分钟；旧when=later只询问时长，不创建半小时预约。重选替换旧预约，开始/退出/换任务取消预约；到点仅返回due_reminders，不自动开始。每项预约取出标记一次，不保证网络丢失后的可靠送达。start_due_at只暴露notified=0的待提醒预约，取出后即返回null；已标记行保留，改约可重新置为待提醒，不删除旧业务数据。
+五分钟轻承诺、任务耗时、耗时自动调档、预约和无操作召回均取消。旧提醒数据不再投递，due_reminders恒[]；AI网络超时保留。前端删除定时器和按钮，详见[生命周期及返回示例](task-lifecycle.md)。
 
-uni-app对话页仅在可见、ready且存在start_due_at时立即检查并每15秒继续；消费/取消/开始后移除计时器，同页新建或改约可重新启动。慢请求不重叠；隐藏/卸载使旧轮询结果失效，再显示后等待旧请求结束即补一次检查。用户操作、更新的状态查询或身份变化后，旧响应不得恢复旧任务。轮询网络错误不弹toast或追加气泡，下个前台周期可再检查；这不是提醒重投/确认送达协议。网页调试页目前仅重新打开时检查。预约前端行为已有离线回归；勿扰是否屏蔽预约、展示确认/重投协议、微信编译与真机验收仍未完成。轻承诺到期/续时、完整步骤查看/重排仍待落实。状态与参数校验、粒度跳步等合并状态见handoff.md。
+备忘录items只返回未完成项，整项完成后移除；reorder只提交当前日期剩余项。未完成任务跨天保留；date是展示清单日期，today_date是实际日期，available_dates列出未完成清单日期。回执/手帐事实和幂等信息保留，图片和私人留言仍仅本地保存。
 
 ## 粒度调整与完成
 
-新任务使用三层任务森林，默认中档。轻/中/重仍对应既有granularity的fine/normal/coarse；请求direction仍为smaller/bigger。加重选父节点，减轻选对应节点下第一个未完成子节点；完成集合不会因为调整改变。完成父任务只消费它剩余的叶子，然后在当前档位找下一段，第一棵完成后继续下一棵。新森林的耗时不自动覆盖当前档位。
+新任务使用三层任务森林，默认中档。轻/中/重仍对应既有granularity的fine/normal/coarse；请求direction仍为smaller/bigger。加重选父节点，减轻选对应节点下第一个未完成子节点；完成集合不会因为调整改变。完成父任务只消费它剩余的叶子，然后在当前档位找下一段，第一棵完成后继续下一棵。新旧任务均不记录耗时或按耗时改档。
 
 完整父任务的current_step包含本次叶子明细，部分完成时仅列剩余叶子，避免重做。旧三清单及_step_plan队列继续兼容，不猜测父子关系、不整体迁移；旧任务依然可打开、操作和交接。详见[任务森林协议](task-forest.md)。
 
@@ -91,7 +91,7 @@ backend/static/ 调试页已改为本地文本手帐示例；它只展示存储�
 - “不要结束”、条件/未来表达、引用、便签中的结束文字与结束方法提问不按退出处理。问题仍走普通回复；明确要求“能不能拆小”仍走调整接口。
 - 无当前任务时，疲惫或收尾表达保持idle，不把“我想休息一下”创建成新目标。
 
-识别采用常用完整分句规则，未知补充和复杂表达可能继续走普通对话；不能宣称覆盖所有自然语言。跨天交接、历史与日志保留规则沿用原实现。此次仅验证HTTP和逻辑，微信页面显示与真机仍待联调。
+识别采用常用完整分句规则，未知补充和复杂表达可能继续走普通对话；不能宣称覆盖所有自然语言。跨天保留及完成移除以task-lifecycle.md为准，旧日志不做破坏性迁移。此次仅验证HTTP和逻辑，微信页面显示与真机仍待联调。
 
 | 动作 | 允许的状态 | 参数 |
 | --- | --- | --- |

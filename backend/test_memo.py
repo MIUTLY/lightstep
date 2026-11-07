@@ -36,6 +36,85 @@ class MemoTests(unittest.TestCase):
         return self.op('select',item_id=r['items'][0]['id'])
     def finish_step(self,key=None):
         f=self.state()['focus'];return self.op('complete',key=key,session_id=f['session_id'],step_id=f['step']['step_id'])
+    def test_removed_task_is_not_saved_as_a_completed_forest(self):
+        r=self.start(); finished_id=r['focus']['item_id']
+        for _ in range(10): self.finish_step()
+        persisted=memo.load(DB(self.db.path),self.uid)
+        day=persisted['days'][memo.today()]
+        self.assertNotIn(finished_id,[i['id'] for i in day['items']])
+        self.assertEqual(set(day['finished'][0]),{'id','title','scope'})
+        self.assertEqual(day['finished'][0]['id'],finished_id)
+        with self.assertRaises(Exception): self.op('select',item_id=finished_id)
+        self.assertEqual(len(self.state()['items']),2)
+
+    def test_reorder_after_removal_accepts_only_remaining_items(self):
+        self.start()
+        for _ in range(10): self.finish_step()
+        r=self.state(); ids=[i['id'] for i in r['items']][::-1]
+        r=self.op('reorder',date=r['date'],revision=r['revision'],item_ids=ids)
+        self.assertEqual([i['id'] for i in r['items']],ids)
+        self.assertEqual(len(memo.load(self.db,self.uid)['days'][r['date']]['finished']),1)
+
+    def test_next_day_login_keeps_partial_progress_order_and_no_restarted_focus(self):
+        with patch('app.memo.today',return_value='2026-11-07'):
+            r=self.start()
+            for _ in range(5): self.finish_step()
+            self.op('end',session_id=r['focus']['session_id'])
+            r=self.state(); ids=[i['id'] for i in r['items']][::-1]
+            before=self.op('reorder',date=r['date'],revision=r['revision'],item_ids=ids)
+        with patch('app.memo.today',return_value='2026-11-08'),patch('app.services.db',DB(self.db.path)),TestClient(app) as client:
+            for _ in range(2):
+                r=client.post('/api/session/open',json={'user_id':self.uid}).json()
+                self.assertEqual(r['items'],before['items']); self.assertIsNone(r['focus'])
+                self.assertEqual(r['date'],'2026-11-07'); self.assertEqual(r['today_date'],'2026-11-08')
+                self.assertEqual(r['available_dates'],['2026-11-07'])
+                self.assertEqual(r['events'],before['events'])
+            with patch.object(self.ai,'decompose',side_effect=AssertionError('must reuse saved forest')):
+                resumed=self.op('select',item_id=ids[-1])
+            self.assertEqual(len(resumed['focus']['progress']['completed_leaf_ids']),5)
+
+    def test_finished_yesterday_does_not_mark_empty_today_complete_or_reemit_events(self):
+        with patch('app.memo.today',return_value='2026-11-07'),patch.object(self.ai,'extract_tasks',return_value=['十题']):
+            self.start()
+            for _ in range(10): self.finish_step()
+            for e in self.state()['events']: self.op('ack',event_id=e['id'])
+            before=memo.load(self.db,self.uid)
+        with patch('app.memo.today',return_value='2026-11-08'):
+            for _ in range(2):
+                r=self.state(); self.assertEqual(r['items'],[])
+                self.assertFalse(r['today_all_completed']); self.assertFalse(r['all_completed'])
+                self.assertEqual(r['events'],[])
+            historical=memo.view(memo.load(DB(self.db.path),self.uid),'2026-11-07')
+            self.assertEqual(historical['items'],[]); self.assertTrue(historical['all_completed'])
+        self.assertEqual(memo.load(self.db,self.uid),before)
+        self.assertEqual(len(before['events']),2)
+
+    def test_old_completed_rows_upgrade_without_dropping_pending_progress(self):
+        r=self.start(); self.finish_step(); state=memo.load(self.db,self.uid)
+        day=state['days'][r['date']]; old=day['items'][1]; old['completed']=True
+        old_id=old['id']; expected=day['items'][0]['plan']
+        with self.db._conn() as c:
+            c.execute('UPDATE memo_state SET data=? WHERE user_id=?',(json.dumps(state),self.uid))
+        restored=memo.load(DB(self.db.path),self.uid)
+        self.assertNotIn(old_id,[i['id'] for i in restored['days'][r['date']]['items']])
+        self.assertEqual(restored['days'][r['date']]['items'][0]['plan'],expected)
+        self.assertEqual(restored['days'][r['date']]['finished'][0]['id'],old_id)
+        self.assertEqual(restored['events'],state['events'])
+        self.op('end',session_id=r['focus']['session_id'])
+        with self.db._conn() as c:
+            saved=json.loads(c.execute('SELECT data FROM memo_state WHERE user_id=?',(self.uid,)).fetchone()[0])
+        self.assertNotIn(old_id,[i['id'] for i in saved['days'][r['date']]['items']])
+
+    def test_new_day_intake_keeps_previous_pending_list_addressable(self):
+        with patch('app.memo.today',return_value='2026-11-07'):
+            before=self.op('intake',text='三件事')
+        with patch('app.memo.today',return_value='2026-11-08'):
+            self.op('intake',text='新三件事')
+            r=self.state(); self.assertEqual(r['available_dates'],['2026-11-08','2026-11-07'])
+            old=memo.view(memo.load(self.db,self.uid),'2026-11-07')
+            self.assertEqual(old['items'],before['items'])
+            self.assertFalse(r['all_completed'])
+
     def test_extract_order_and_default_prompt(self):
         r=self.op('intake',text='写作业，看论文，洗衣服')
         self.assertEqual([i['title'] for i in r['items']],['写作业','看论文','洗衣服']);self.assertIsNone(r['focus']);self.assertIn('写作业',r['reply'])
@@ -57,10 +136,10 @@ class MemoTests(unittest.TestCase):
         with patch.object(self.ai,'decompose',side_effect=AssertionError('AI must not regenerate')):
             r=self.op('select',item_id=r['items'][0]['id'])
         self.assertIn('第6题',r['focus']['step']['current_step'])
-    def test_only_finished_item_crossed_out(self):
+    def test_only_finished_item_removed(self):
         self.start()
         for _ in range(10):r=self.finish_step()
-        self.assertEqual([i['completed'] for i in r['items']],[True,False,False]);self.assertIsNone(r['focus']);self.assertFalse(r['all_completed']);self.assertEqual(len(r['events']),1)
+        self.assertEqual([i['title'] for i in r['items']],['看论文','洗衣服']);self.assertIsNone(r['focus']);self.assertFalse(r['all_completed']);self.assertEqual(len(r['events']),1)
     def test_all_done_journal_once_and_idempotent_finish(self):
         r=self.op('intake',text='三件事')
         for item in r['items']:
@@ -117,7 +196,7 @@ class MemoTests(unittest.TestCase):
     def test_new_day_keeps_old_progress_and_no_empty_journal(self):
         self.start();self.finish_step()
         with patch('app.memo.today',return_value='2099-01-01'):
-            r=self.state();self.assertEqual(r['items'],[]);self.assertIsNotNone(r['focus']);self.assertFalse(r['all_completed'])
+            r=self.state();self.assertEqual(len(r['items']),3);self.assertIsNotNone(r['focus']);self.assertFalse(r['today_all_completed'])
     def test_http_default_chat_extracts_instead_of_combined_task(self):
         with patch('app.services.db',self.db),patch('app.services.llm',self.ai),TestClient(app) as client:
             r=client.post('/api/chat',json={'user_id':self.uid,'message':'三件事','request_id':'chat'})
@@ -139,7 +218,7 @@ class MemoTests(unittest.TestCase):
         self.assertFalse(r['all_completed'])
         updated=next(e for e in r['events'] if e['kind']=='daily_journal')
         self.assertFalse(updated['eligible']);self.assertEqual(updated['id'],journal['id'])
-        self.op('select',item_id=r['items'][1]['id'])
+        self.op('select',item_id=r['items'][0]['id'])
         for _ in range(10):self.finish_step()
         updated=next(e for e in self.state()['events'] if e['kind']=='daily_journal')
         self.assertTrue(updated['eligible']);self.assertEqual(updated['id'],journal['id']);self.assertEqual(len(updated['tasks']),2)
@@ -148,7 +227,7 @@ class MemoTests(unittest.TestCase):
             self.op('intake',key='midnight',text='三件事')
         with patch('app.memo.today',return_value='2026-11-08'):
             self.op('intake',key='midnight',text='三件事')
-            self.assertEqual(self.state()['items'],[])
+            self.assertEqual(len(self.state()['items']),3)
         self.assertEqual(len(memo.view(memo.load(self.db,self.uid),'2026-11-07')['items']),3)
     def test_scope_adapter_rejects_invented_range(self):
         ai=OpenAICompatLLM(Settings(llm_api_key='test'))
