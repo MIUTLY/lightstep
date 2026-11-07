@@ -37,7 +37,7 @@
 
 ## 相关提交
 
-本轮实施提交：待上传后补充。以下旧记录仅为历史基线，不表示本轮仍未改代码。
+本轮实施提交：[cba23a0](https://github.com/MIUTLY/lightstep/commit/cba23a0e665fcf704e5ba96970a8c25dbdbb4efb)。以下旧记录仅为历史基线，不表示本轮仍未改代码。
 
 ---
 
