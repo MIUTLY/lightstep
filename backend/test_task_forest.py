@@ -11,15 +11,16 @@ import unittest
 from unittest.mock import patch
 
 _boot = tempfile.TemporaryDirectory(prefix="lightstep-forest-boot-")
-os.environ["LLM_PROVIDER"] = "mock"
+os.environ["LLM_PROVIDER"] = "openai"
 os.environ["LIGHTSTEP_DB"] = str(Path(_boot.name) / "boot.db")
 
 from fastapi.testclient import TestClient
 from app import services, task_forest
 from app.config import Settings
 from app.db import DB
-from app.decompose import decompose_forest
-from app.llm import MockLLM, OpenAICompatLLM
+from tests.fakes import decompose_forest
+from tests.fakes import MockLLM
+from app.llm import OpenAICompatLLM, AIError
 from app.main import app
 
 
@@ -274,7 +275,7 @@ class ForestTests(unittest.TestCase):
 
 
 class ForestValidationTests(unittest.TestCase):
-    def test_invalid_model_structures_are_rejected_and_adapter_falls_back(self):
+    def test_invalid_model_structures_fail_without_fallback(self):
         invalid = [None, {}, {'trees': []}, {'trees': ['x']}, {'trees': [{'text': '重', 'children': []}]},
                    {'trees': [{'text': '重', 'children': [{'text': '中', 'children': [None]}]}]},
                    {'trees': [{'text': '重', 'children': [{'text': '中', 'children': [{'text': ' '}]}]}]},
@@ -284,8 +285,8 @@ class ForestValidationTests(unittest.TestCase):
             with self.subTest(data=bad):
                 with self.assertRaises(ValueError): task_forest.validate_blueprint(bad)
                 with patch.object(adapter, '_chat', return_value=json.dumps(bad)):
-                    fallback = adapter.decompose('写论文')
-                self.assertEqual(fallback, decompose_forest('写论文'))
+                    with self.assertRaises(AIError):
+                        adapter.decompose('写论文')
 
     def test_depth_text_node_and_branch_limits_and_duplicate_ownership(self):
         too_deep = example(); too_deep['trees'][0]['children'][0]['children'][0]['children'] = [{'text': 'extra'}]
@@ -322,13 +323,13 @@ class ForestValidationTests(unittest.TestCase):
             self.assertEqual(consumed, all_leaves)
             self.assertEqual(set(plan['completed_leaf_ids']), all_leaves)
 
-    def test_fallback_handles_long_goals_and_large_numeric_counts_within_limits(self):
+    def test_fixture_handles_long_goals_and_large_numeric_counts_within_limits(self):
         for title in ('一个未归类的目标' * 200, '背' + '9' * 5000 + '个单词'):
             levels = task_forest.new_plan(decompose_forest(title))
             plan = task_forest.read({'levels_json': json.dumps(levels), 'level': 2})
             self.assertTrue(task_forest.view(plan)['current_step'])
 
-    def test_offline_presets_are_valid_forests_and_quantity_ranges_are_disjoint(self):
+    def test_isolated_fixtures_are_valid_forests_and_quantity_ranges_are_disjoint(self):
         for title in ['写论文', '背50个单词', '阅读', '写代码', '运动', '收拾房间', '做件小事']:
             plan = task_forest.new_plan(decompose_forest(title))[task_forest.KEY]
             self.assertTrue(task_forest.all_leaf_ids(plan))

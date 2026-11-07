@@ -7,6 +7,7 @@
 """
 import json
 import sqlite3
+import uuid
 from contextlib import contextmanager
 from datetime import datetime, timedelta, timezone
 
@@ -14,6 +15,11 @@ from .config import settings
 from .decompose import domain_of
 
 _SCHEMA = """
+CREATE TABLE IF NOT EXISTS task_generation_drafts (
+    user_id TEXT PRIMARY KEY,
+    draft_json TEXT NOT NULL
+);
+
 CREATE TABLE IF NOT EXISTS users (
     user_id        TEXT PRIMARY KEY,
     first_seen     TEXT,
@@ -201,6 +207,62 @@ class DB:
         vals = list(fields.values()) + [now_iso(), user_id]
         with self._conn() as c:
             c.execute(f"UPDATE preferences SET {', '.join(cols)}, updated_at=? WHERE user_id=?", vals)
+
+    # ---------- AI生成草稿：失败不修改当前任务 ----------
+
+    def get_generation(self, user_id):
+        with self._conn() as c:
+            row = c.execute("SELECT draft_json FROM task_generation_drafts WHERE user_id=?", (user_id,)).fetchone()
+            return json.loads(row[0]) if row else None
+
+    def begin_generation(self, user_id, original_input, goal, answers=None, previous_id=None):
+        with self._conn() as c:
+            c.execute("BEGIN IMMEDIATE")
+            row = c.execute("SELECT draft_json FROM task_generation_drafts WHERE user_id=?", (user_id,)).fetchone()
+            if previous_id is not None and (not row or json.loads(row[0])["generation_id"] != previous_id):
+                return None
+            task = c.execute("SELECT * FROM active_task WHERE user_id=?", (user_id,)).fetchone()
+            draft = {"generation_id": uuid.uuid4().hex, "original_input": original_input, "goal": goal,
+                     "answers": answers or [], "expected_task": dict(task) if task else None,
+                     "status": "generating", "question": None, "error": None, "updated_at": now_iso()}
+            c.execute("INSERT OR REPLACE INTO task_generation_drafts VALUES (?, ?)",
+                      (user_id, json.dumps(draft, ensure_ascii=False)))
+            return draft
+
+    def finish_generation(self, user_id, generation_id, *, status, question=None, error=None):
+        with self._conn() as c:
+            c.execute("BEGIN IMMEDIATE")
+            row = c.execute("SELECT draft_json FROM task_generation_drafts WHERE user_id=?", (user_id,)).fetchone()
+            if not row:
+                return False
+            draft = json.loads(row[0])
+            if draft["generation_id"] != generation_id or draft["status"] != "generating":
+                return False
+            draft.update(status=status, question=question, error=error, updated_at=now_iso())
+            c.execute("UPDATE task_generation_drafts SET draft_json=? WHERE user_id=?",
+                      (json.dumps(draft, ensure_ascii=False), user_id))
+            return True
+
+    def install_generated_task(self, user_id, draft, title, levels_json):
+        """Atomically compare both draft and task snapshots before replacing anything."""
+        with self._conn() as c:
+            c.execute("BEGIN IMMEDIATE")
+            row = c.execute("SELECT draft_json FROM task_generation_drafts WHERE user_id=?", (user_id,)).fetchone()
+            if not row or json.loads(row[0])["generation_id"] != draft["generation_id"] or json.loads(row[0])["status"] != "generating":
+                return False
+            task = c.execute("SELECT * FROM active_task WHERE user_id=?", (user_id,)).fetchone()
+            if (dict(task) if task else None) != draft["expected_task"]:
+                return False
+            c.execute("INSERT OR IGNORE INTO users (user_id) VALUES (?)", (user_id,))
+            c.execute("UPDATE users SET last_seen=? WHERE user_id=?", (today_str(), user_id))
+            c.execute("INSERT OR REPLACE INTO active_task "
+                      "(user_id,title,levels_json,level,current_idx,steps_done,state,date,updated_at) "
+                      "VALUES (?,?,?,2,0,0,'ready',?,?)", (user_id, title, levels_json, today_str(), now_iso()))
+            c.execute("DELETE FROM task_start_reminders WHERE user_id=?", (user_id,))
+            saved = dict(draft, status="succeeded", question=None, error=None, updated_at=now_iso())
+            c.execute("UPDATE task_generation_drafts SET draft_json=? WHERE user_id=?",
+                      (json.dumps(saved, ensure_ascii=False), user_id))
+            return True
 
     # ---------- 当前任务 ----------
 

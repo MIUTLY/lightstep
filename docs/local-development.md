@@ -19,11 +19,11 @@ Windows PowerShell中，从backend/运行：
 ```powershell
 $env:LIGHTSTEP_HOST = "0.0.0.0"
 $env:LIGHTSTEP_PORT = "8000"
-$env:LLM_PROVIDER = "mock"
+$env:LLM_PROVIDER = "openai"
 python run.py
 ```
 
-先用mock验证网络，避免模型延迟混淆问题。命令行环境变量优先于.env；正式测试AI前改回openai并配置密钥。
+先访问/api/health验证网络，此接口不调用AI。命令行环境变量优先于.env；新任务必须在后端配置真实AI，未配置只明确报错，不使用mock生成。
 
 用ipconfig查看电脑当前Wi-Fi连接的IPv4，例如192.168.1.8。该值仅示例，必须替换为自己的实际地址。
 
@@ -39,6 +39,6 @@ python run.py
 
 多人异地联调或比赛展示需要稳定可达地址时，再部署后端并配置小程序对应的网络访问要求。本轮没有替用户购买服务器、配置公网或部署服务。
 
-模型调用可能串行发生两次：当前前端请求超时为35秒，后端模型单次默认30秒。若只有真实AI超时，另行协调前后端总超时预算，不将其直接判断为服务器不存在。
+任务生成和内容复核是两次串行真实请求，共享后端默认30秒逻辑预算；当前前端请求超时35秒。本轮未改前端配置，网络阶段超时实际耗时及微信表现仍需联调。
 
 参考：uni-app官方运行说明 https://uniapp.dcloud.net.cn/quickstart-hx 。

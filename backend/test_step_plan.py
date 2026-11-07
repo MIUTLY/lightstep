@@ -9,11 +9,11 @@ from unittest.mock import patch
 
 _boot = tempfile.TemporaryDirectory(prefix="lightstep-plan-boot-")
 os.environ["LIGHTSTEP_DB"] = str(Path(_boot.name) / "boot.db")
-os.environ["LLM_PROVIDER"] = "mock"
+os.environ["LLM_PROVIDER"] = "openai"
 
 from fastapi.testclient import TestClient
 from app.db import DB
-from app.llm import MockLLM
+from tests.fakes import MockLLM
 from app.main import app
 from app import services, step_plan
 
@@ -43,7 +43,7 @@ class StepPlanTests(unittest.TestCase):
 
     def start(self, title="背单词", normal=None):
         # 这些是旧队列的兼容回归；新建森林的产品规则在test_task_forest覆盖。
-        from app.decompose import decompose
+        from tests.fakes import decompose
         levels = decompose(title) if normal is None else {"fine": ["另一套细清单"], "normal": normal, "coarse": ["另一套粗清单"]}
         self.db.ensure_user(self.uid)
         self.db.create_active_task(self.uid, title, json.dumps(step_plan.new_plan(levels, 2)), 2, state="ready")

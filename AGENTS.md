@@ -15,7 +15,7 @@
 
 ## 验证与交接
 - 在 backend/ 安装 requirements.txt、运行 python run.py 和 python smoke_test.py。
-- 默认 LLM_PROVIDER=mock，测试通过 LIGHTSTEP_DB 指向独立临时数据库。
+- 实际运行只支持真实AI（LLM_PROVIDER=openai），不得增加离线提供方或任务模板兜底。测试显式注入backend/tests/fakes.py或HTTP替身，使用独立临时SQLite；测试替身不得被app或run.py导入。
 - 冒烟通过仅证明覆盖的现有行为，不代表满足全部策划；业务修复补充必要回归验证。
 - 模型调用考虑超时、错误和非法返回。
 - 前端成员提交源码后补齐真实依赖、版本和运行命令，不凭空创建实现。

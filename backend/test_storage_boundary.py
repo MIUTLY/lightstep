@@ -11,9 +11,10 @@ from unittest.mock import patch
 # 应用首次导入也只能创建临时数据库。
 _boot_dir = tempfile.TemporaryDirectory(prefix="lightstep-boundary-boot-")
 os.environ["LIGHTSTEP_DB"] = str(Path(_boot_dir.name) / "boot.db")
-os.environ["LLM_PROVIDER"] = "mock"
+os.environ["LLM_PROVIDER"] = "openai"
 
 from fastapi.testclient import TestClient
+from tests.fakes import MockLLM
 from app.db import DB
 from app.main import app
 
@@ -24,12 +25,15 @@ class StorageBoundaryTests(unittest.TestCase):
         self.db = DB(str(Path(self.tmp.name) / "test.db"))
         self.swap = patch("app.services.db", self.db)
         self.swap.start()
+        self.fake = patch("app.services.llm", MockLLM())
+        self.fake.start()
         self.client = TestClient(app)
         self.uid = "boundary-test"
 
     def tearDown(self):
         self.client.close()
         self.swap.stop()
+        self.fake.stop()
         self.tmp.cleanup()
 
     def start_task(self):

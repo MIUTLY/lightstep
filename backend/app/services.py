@@ -17,8 +17,7 @@ from .decompose import domain_of
 from .ending_intent import ending_intent
 from .granularity import judge, shift_level, level_name
 from . import step_plan, task_forest
-from .llm import llm
-from .decompose import decompose_forest
+from .llm import llm, AIError, Clarification, invalid_response
 from .schemas import Reply, TaskView
 
 # ---------- 意图关键词 ----------
@@ -26,7 +25,7 @@ from .schemas import Reply, TaskView
 _NEGATIVE = ["不想", "不要", "算了", "不用", "不做", "不做了"]
 _GOAL_INTENT = ["想", "要", "得", "该", "准备", "打算", "试试", "试着", "今晚", "今晚要", "开始做"]
 _GOAL_VERBS = ["刷题", "写", "背", "读", "看", "学", "复习", "整理", "收拾", "跑步", "健身",
-               "运动", "练", "做题", "改", "画", "做"]
+               "运动", "练", "做题", "改", "画", "做", "洗", "打扫", "清洁"]
 _TOO_BIG = ["太多", "太重", "太大", "好难", "太难", "做不完", "好多", "缩小", "拆细", "拆小", "太累", "有点难", "轻一点"]
 _TOO_EASY = ["太简单", "太容易", "加量", "加一点", "不够", "太少", "放大", "太轻松", "重一点"]
 _NOTE = ["记一下", "记个", "记得", "别忘", "提醒我", "备忘", "记下", "帮我记"]
@@ -195,6 +194,12 @@ def _handoff_last_step(handoff: dict) -> str:
 # ---------- 会话 ----------
 
 def handle_open(user_id: str) -> Reply:
+    result = _handle_open(user_id)
+    result.generation = generation_status(user_id)
+    return result
+
+
+def _handle_open(user_id: str) -> Reply:
     info = db.open_session(user_id)
     task = db.get_active_task(user_id)
     due = db.due_reminders(user_id) + db.take_due_start_reminder(user_id)
@@ -224,6 +229,21 @@ def handle_open(user_id: str) -> Reply:
 
 def handle_chat(user_id: str, message: str) -> Reply:
     text = (message or "").strip()
+    # Generation must run before rollover: a failed replacement cannot clear yesterday's task.
+    task = db.get_active_task(user_id)
+    draft = db.get_generation(user_id)
+    if draft and draft["status"] == "needs_clarification" and text.startswith(("补充：", "补充:")):
+        answer = text[3:].strip()
+        if not answer:
+            return _generation_reply(user_id, "请在“补充：”后写下答案。")
+        return retry_generation(user_id, draft["generation_id"], answer)
+    if text in ("重试", "重试生成") and draft and draft["status"] in ("failed", "generating"):
+        return retry_generation(user_id, draft["generation_id"])
+    if text and _is_switch_command(text) and not _is_question(text) and not _has_any(text, _NOTE) and not ending_intent(text):
+        return _switch_task(user_id, text)
+    if text and not task and _is_goal(text) and not _has_any(text, _NOTE + _REST + _AFK) and not ending_intent(text):
+        return _create_task(user_id, text)
+    # Clarification answers use a distinct endpoint; never steal task commands or ordinary questions.
     db.ensure_user(user_id)
     task = db.get_active_task(user_id)
     if not text:
@@ -313,25 +333,66 @@ def _answer_current_step(task: dict, text: str) -> Reply:
 
 # ---------- 任务流程 ----------
 
-def _create_task(user_id: str, text: str) -> Reply:
-    title = _extract_title(text)
-    domain = domain_of(title)
-    # 新规则明确从中档开始；旧摩擦与情绪记录不覆盖用户的默认档位。
-    level = 2
-    decomposed = llm.decompose(title)
-    try:
-        levels = task_forest.new_plan(decomposed)
-    except (ValueError, TypeError, KeyError):
-        # 第三方适配器返回旧三清单等非法结果时，仍不能把坏结构存入任务。
-        levels = task_forest.new_plan(decompose_forest(title))
-    levels_json = json.dumps(levels, ensure_ascii=False)
-    db.create_active_task(user_id, title, levels_json, level, state="ready")
-    task = db.get_active_task(user_id)
+def generation_status(user_id: str):
+    draft = db.get_generation(user_id)
+    if draft is None:
+        return None
+    return {k: v for k, v in draft.items() if k != "expected_task"}
 
-    reply = persona.task_ready(title, domain)
-    reply = f"{reply} {persona.ask_when()}"
-    return Reply(reply=reply, state="ready", task=_task_view(task),
-                 buttons=_START_BUTTONS)
+
+def _generation_reply(user_id, message):
+    task = db.get_active_task(user_id)
+    generation = generation_status(user_id)
+    buttons = _buttons_for(task)
+    if generation and generation["status"] == "failed":
+        buttons = ["重试生成"] + buttons
+    return Reply(reply=message, state=task["state"] if task else "idle",
+                 task=_task_view(task) if task else None, buttons=buttons, generation=generation)
+
+
+def _run_generation(user_id, draft):
+    try:
+        # Pass the original goal, not the domain or a title with meaningful words removed.
+        goal = draft["goal"]
+        if draft["answers"]:
+            goal = json.dumps({"original_goal": goal, "clarification_answers": draft["answers"]}, ensure_ascii=False)
+        decomposed = llm.decompose(goal)
+        try:
+            levels = task_forest.new_plan(decomposed)
+        except (ValueError, TypeError, KeyError, RecursionError):
+            raise invalid_response() from None
+        if not db.install_generated_task(user_id, draft, draft["goal"], json.dumps(levels, ensure_ascii=False)):
+            raise AIError("TASK_CHANGED", "生成期间任务或目标已变化，已有进度已保留，请重试生成。", 409)
+    except Clarification as clarify:
+        if not db.finish_generation(user_id, draft["generation_id"], status="needs_clarification", question=clarify.question):
+            raise HTTPException(409, "目标已变化，请刷新后再试。")
+        return _generation_reply(user_id, clarify.question + " 请回复“补充：你的答案”。")
+    except AIError as error:
+        if not db.finish_generation(user_id, draft["generation_id"], status="failed",
+                error={"code": error.code, "message": error.message, "retryable": True}):
+            raise HTTPException(409, "目标已变化，旧生成结果未保存，请刷新后再试。")
+        return _generation_reply(user_id, error.message + " 原始输入已保留，已有任务和进度不会因此改变。")
+    return _generation_reply(user_id, "任务已准备好，只展示当前这一段。 " + persona.ask_when())
+
+
+def _create_task(user_id: str, text: str, *, original_input=None) -> Reply:
+    draft = db.begin_generation(user_id, text if original_input is None else original_input, text)
+    return _run_generation(user_id, draft)
+
+
+def retry_generation(user_id, generation_id, answer=None):
+    previous = db.get_generation(user_id)
+    if not previous or previous["generation_id"] != generation_id or previous["status"] == "succeeded":
+        raise HTTPException(409, "生成请求已变化或已成功，请刷新后再试。")
+    if answer is not None and previous["status"] != "needs_clarification":
+        raise HTTPException(409, "当前没有需要回答的澄清问题。")
+    if answer is None and previous["status"] == "needs_clarification":
+        raise HTTPException(409, "请先回答澄清问题，再生成任务。")
+    answers = previous["answers"] + ([{"question": previous["question"], "answer": answer}] if answer else [])
+    draft = db.begin_generation(user_id, previous["original_input"], previous["goal"], answers, previous_id=generation_id)
+    if draft is None:
+        raise HTTPException(409, "生成请求已变化，请刷新后再试。")
+    return _run_generation(user_id, draft)
 
 
 def handle_choose_time(user_id: str, when: str) -> Reply:
@@ -572,12 +633,12 @@ def _switch_task(user_id: str, text: str) -> Reply:
         if command.startswith(word):
             command = command[len(word):]
             break
-    new_title = _extract_title(command)
-    if new_title == "这件事":
+    new_title = command.strip("，。！？、,.!? ")
+    if not new_title:
         return Reply(reply=persona.switch_ask(), state=old["state"] if old else "idle",
                      task=_task_view(old) if old else None, buttons=_buttons_for(old))
     # 新任务成功生成后再替换，不能在模型调用之前先删除旧任务。
-    return _create_task(user_id, new_title)
+    return _create_task(user_id, new_title, original_input=text)
 
 
 # ---------- 跨天交接 ----------
@@ -607,8 +668,8 @@ def get_state(user_id: str) -> dict:
     db.ensure_user(user_id)
     task = db.get_active_task(user_id)
     if not task:
-        return {"state": "idle", "task": None}
-    return {"state": task["state"], "task": _task_view(task).model_dump()}
+        return {"state": "idle", "task": None, "generation": generation_status(user_id)}
+    return {"state": task["state"], "task": _task_view(task).model_dump(), "generation": generation_status(user_id)}
 
 
 def get_history(user_id: str) -> list[dict]:
