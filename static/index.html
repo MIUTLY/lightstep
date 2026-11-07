@@ -1,0 +1,55 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>轻步 LightStep · 小步</title>
+  <link rel="stylesheet" href="/style.css" />
+</head>
+<body>
+  <div class="app">
+    <header class="topbar">
+      <div class="cat-avatar" aria-hidden="true">
+        <svg viewBox="0 0 48 48" fill="none" xmlns="http://www.w3.org/2000/svg">
+          <path d="M9 19 L13 7 L21 15 Z" fill="#211C16" />
+          <path d="M27 15 L35 7 L39 19 Z" fill="#211C16" />
+          <path d="M9 19 Q9 41 24 41 Q39 41 39 19 Z" fill="#211C16" />
+          <circle cx="18" cy="27" r="2.7" fill="#D9872B" />
+          <circle cx="30" cy="27" r="2.7" fill="#D9872B" />
+          <path d="M22.5 31 L25.5 31 L24 34 Z" fill="#F5F0E8" />
+        </svg>
+      </div>
+      <div class="brand">
+        <h1>轻步 <span>LightStep</span></h1>
+        <p>小步在 · 不催促 · 不吓你 · 不记仇</p>
+      </div>
+    </header>
+
+    <div class="layout">
+      <main class="chat-panel">
+        <div class="messages" id="messages"></div>
+        <div class="quick-actions" id="quickActions"></div>
+        <form class="composer" id="composer">
+          <textarea id="input" rows="1" placeholder="说点什么，或者点上面的一件小事…"></textarea>
+          <button type="submit" class="send-btn">发送</button>
+        </form>
+      </main>
+
+      <aside class="sidebar">
+        <div class="tabs" id="tabs">
+          <button class="tab active" data-tab="today">今日</button>
+          <button class="tab" data-tab="journal">手帐</button>
+          <button class="tab" data-tab="history">历史</button>
+        </div>
+        <div class="panels">
+          <div class="panel" id="panel-today"></div>
+          <div class="panel" id="panel-journal" hidden></div>
+          <div class="panel" id="panel-history" hidden></div>
+        </div>
+      </aside>
+    </div>
+  </div>
+
+  <script src="/app.js"></script>
+</body>
+</html>

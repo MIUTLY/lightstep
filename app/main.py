@@ -1,0 +1,110 @@
+"""FastAPI 应用入口（后端 API + 前端静态托管）。
+
+后端 API 在 /api/* 下；前端页面在项目根目录 static/ 下，打开 http://127.0.0.1:8000 即可。
+"""
+import os
+
+from fastapi import FastAPI
+from fastapi.middleware.cors import CORSMiddleware
+from fastapi.staticfiles import StaticFiles
+
+from . import services
+from .schemas import (
+    ChatRequest, ChooseTimeRequest, CommitRequest, ExitRequest,
+    JournalAddRequest, NoteRequest, StepCompleteRequest, StepResizeRequest,
+    UserRequest,
+)
+
+app = FastAPI(title="轻步 LightStep", description="AI 学习搭子「小步」后端")
+
+app.add_middleware(
+    CORSMiddleware,
+    allow_origins=["*"],
+    allow_methods=["*"],
+    allow_headers=["*"],
+)
+
+
+@app.post("/api/session/open")
+def open_session(req: UserRequest):
+    return services.handle_open(req.user_id)
+
+
+@app.post("/api/chat")
+def chat(req: ChatRequest):
+    return services.handle_chat(req.user_id, req.message)
+
+
+@app.post("/api/task/choose_time")
+def choose_time(req: ChooseTimeRequest):
+    return services.handle_choose_time(req.user_id, req.when)
+
+
+@app.post("/api/task/commit")
+def commit(req: CommitRequest):
+    return services.handle_commit(req.user_id, req.agree)
+
+
+@app.post("/api/step/complete")
+def step_complete(req: StepCompleteRequest):
+    return services.handle_step_complete(req.user_id, req.duration_ms)
+
+
+@app.post("/api/step/resize")
+def step_resize(req: StepResizeRequest):
+    return services.handle_resize(req.user_id, req.direction)
+
+
+@app.post("/api/task/exit")
+def exit_task(req: ExitRequest):
+    return services.handle_exit(req.user_id, req.gentle)
+
+
+@app.post("/api/note")
+def note(req: NoteRequest):
+    return services.handle_note(req.user_id, req.content)
+
+
+@app.post("/api/handoff/resume")
+def handoff_resume(req: UserRequest):
+    return services.resume_handoff(req.user_id)
+
+
+@app.post("/api/handoff/dismiss")
+def handoff_dismiss(req: UserRequest):
+    return services.dismiss_handoff(req.user_id)
+
+
+@app.get("/api/journal")
+def journal_list(user_id: str):
+    return services.get_journal(user_id)
+
+
+@app.post("/api/journal/add")
+def journal_add(req: JournalAddRequest):
+    return services.add_journal(req.user_id, req.note)
+
+
+@app.delete("/api/journal/{entry_id}")
+def journal_delete(entry_id: int, user_id: str):
+    return services.delete_journal(user_id, entry_id)
+
+
+@app.get("/api/session/state")
+def session_state(user_id: str):
+    return services.get_state(user_id)
+
+
+@app.get("/api/history")
+def history(user_id: str):
+    return services.get_history(user_id)
+
+
+@app.get("/api/daily/summary")
+def daily_summary(user_id: str):
+    return services.get_daily_summary(user_id)
+
+
+# 前端静态资源（必须在所有 API 路由之后挂载，否则会抢走 /api 路径）
+_STATIC_DIR = os.path.join(os.path.dirname(os.path.dirname(os.path.abspath(__file__))), "static")
+app.mount("/", StaticFiles(directory=_STATIC_DIR, html=True), name="static")
