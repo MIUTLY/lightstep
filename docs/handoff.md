@@ -2,6 +2,8 @@
 
 日期：2026-11-07。分支：fix/preserve-step-sequence。基于fix/task-intent-and-validation的8bd7c4e；PR #4仍未合并，本轮以该分支为目标。下方为各轮历史记录，当前状态以本节为准。
 
+实施提交：[6eaa388](https://github.com/MIUTLY/lightstep/commit/6eaa3889361150a79b4831e42afce22f728a9532)；[PR #5](https://github.com/MIUTLY/lightstep/pull/5)，尚未合并。
+
 ## 改了什么、依据与原因
 
 - B01：移除不同清单间的完成比例映射，新任务以normal路线构建有序动作队列。完成只消费刚展示过的动作，防止完成“打开单词本”后跳过学习步骤。
