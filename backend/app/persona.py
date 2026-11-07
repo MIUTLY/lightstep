@@ -72,6 +72,14 @@ def exit_line() -> str:
     return "好，那先到这儿。随时回来。"
 
 
+def tired_choice() -> str:
+    return "累了就先歇歇。想结束可以点「今天到这吧」，也可以把这一步拆小。进度先留着。"
+
+
+def tired_idle() -> str:
+    return "那先歇歇。我在，想做点什么时再来。"
+
+
 def shrink() -> str:
     return "太重了？行，拆小一点。"
 

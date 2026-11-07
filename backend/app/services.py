@@ -14,6 +14,7 @@ from fastapi import HTTPException
 from . import persona
 from .db import db
 from .decompose import domain_of
+from .ending_intent import ending_intent
 from .granularity import judge, shift_level, level_name
 from . import step_plan
 from .llm import llm
@@ -25,7 +26,6 @@ _NEGATIVE = ["不想", "不要", "算了", "不用", "不做", "不做了"]
 _GOAL_INTENT = ["想", "要", "得", "该", "准备", "打算", "试试", "试着", "今晚", "今晚要", "开始做"]
 _GOAL_VERBS = ["刷题", "写", "背", "读", "看", "学", "复习", "整理", "收拾", "跑步", "健身",
                "运动", "练", "做题", "改", "画", "做"]
-_EXIT = ["不做了", "今天到这", "到此", "结束", "收工", "够了", "温柔收尾", "不想做了", "先到这"]
 _TOO_BIG = ["太多", "太重", "太大", "好难", "太难", "做不完", "好多", "缩小", "拆细", "拆小", "太累", "有点难"]
 _TOO_EASY = ["太简单", "太容易", "加量", "加一点", "不够", "太少", "放大", "太轻松"]
 _NOTE = ["记一下", "记个", "记得", "别忘", "提醒我", "备忘", "记下", "帮我记"]
@@ -216,6 +216,16 @@ def handle_chat(user_id: str, message: str) -> Reply:
 def _chat_reply(user_id: str, text: str) -> Reply:
     task = db.get_active_task(user_id)
 
+    # 先识别完整的收尾表达；“结束条件是什么”“不要结束”不能清空任务。
+    ending = ending_intent(text)
+    if ending == "end":
+        return _gentle_end(user_id, task) if task else Reply(reply=persona.exit_line(), state="idle")
+    if ending == "tired":
+        if not task:
+            return Reply(reply=persona.tired_idle(), state="idle")
+        return Reply(reply=persona.tired_choice(), state=task["state"], task=_task_view(task),
+                     buttons=["今天到这吧", "太重了"])
+
     resize_request = _has_any(text, ("帮我拆小", "帮我拆细", "能拆小", "能拆细", "可以拆小",
                                     "可以拆细", "能不能拆小", "能不能拆细", "帮我加量"))
     if task and _is_question(text) and not resize_request:
@@ -225,16 +235,12 @@ def _chat_reply(user_id: str, text: str) -> Reply:
     if not task and _has_any(text, _CONTINUE) and db.get_handoff(user_id):
         return resume_handoff(user_id)
 
-    # 2. 温柔收尾
-    if task and _has_any(text, _EXIT):
-        return _gentle_end(user_id, task)
-
     # 3. 走神记笔记
     if _has_any(text, _NOTE):
         return _note(user_id, text)
 
     # 4. 今天什么都不想干
-    if _has_any(text, _REST):
+    if not task and _has_any(text, _REST):
         return _rest_day(user_id)
 
     # 5. 换件事
