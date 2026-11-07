@@ -46,3 +46,21 @@ REVIEW_PROMPT = (
     "只返回JSON，严格只有decision(accept或reject)、relevant、coverage、parent_child_consistent、no_duplicates。"
     "后四项是布尔值，只有全部为true才可accept。"
 )
+
+# Product policy shared by planning, scope clarification and independent plan review.
+ACTION_SUPPORT_POLICY = (
+    "LightStep帮助用户把难事拆成好开始的小事，只记录用户自报的行动进度，不评价结果质量。"
+    "用户点做完了即完成当前行动，不要求正确答案、正确率、达标程度、证据或AI验收。"
+    "每一步用短、直接、自然的动词表达，让用户知道下一下怎么动手，不写机器式确认、完整性核验或交付报告。"
+    "每个子动作必须实际推进用户目标；不得为了证明做过而新增记录、截图、汇报理由、自评、核对无遗漏、最终成果输出等负担。"
+    "若记录、论证、检查或交付本身是用户明确目标或工作不可缺少的内容，则保留，不能机械删除这些词。"
+    "例如一道数学难题可按需要拆成看看相关知识点、试写一种思路、动笔算一算；不检查用户算得对不对，也不强制复盘或上传。"
+    "这只是行动风格示例，不能将数学步骤套用所有目标。英语选择题不应额外要求记录每题理由、核验完整性或另交最终答案。"
+    "父子关系覆盖约定的行动范围，而非确保客观成果达标；不能把整项任务缩成只打开材料。"
+    "任务文字不带本次内容、获取并确认、确认无遗漏等为了系统管理而写的说明。必要数量和对象清楚表达。"
+)
+DECOMPOSE_PROMPT += ACTION_SUPPORT_POLICY
+REVIEW_PROMPT += ACTION_SUPPORT_POLICY + (
+    "审核的是AI计划是否合理省力，不是用户做得对不对。若计划强加与用户目标无关的留证、理由、自评或质量验收，"
+    "relevant必须为false且decision=reject；不要为了coverage通过而要求这些多余动作。"
+)
