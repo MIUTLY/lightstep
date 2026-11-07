@@ -42,7 +42,7 @@ def main():
     uid = f"smoke_{int(time.time())}"
     print(f"===== 主流程（用户 {uid}）=====")
     show("打开", client.post("/api/session/open", json={"user_id": uid}))
-    show("想写论文", client.post("/api/chat", json={"user_id": uid, "message": "好，那我试试写课程论文"}))
+    show("想写论文", client.post("/api/chat", json={"user_id": uid, "workflow": "legacy", "message": "好，那我试试写课程论文"}))
     show("现在开始", client.post("/api/task/choose_time", json={"user_id": uid, "when": "now"}))
     show("同意5分钟", client.post("/api/task/commit", json={"user_id": uid, "agree": True}))
     show("完成一步(快)", client.post("/api/step/complete", json={"user_id": uid, "duration_ms": 5000}))
@@ -60,20 +60,20 @@ def main():
     print("\n===== 摩擦地图 =====")
     uid2 = f"friction_{int(time.time())}"
     client.post("/api/session/open", json={"user_id": uid2})
-    show("背单词", client.post("/api/chat", json={"user_id": uid2, "message": "背单词"}))
+    show("背单词", client.post("/api/chat", json={"user_id": uid2, "workflow": "legacy", "message": "背单词"}))
     show("现在开始", client.post("/api/task/choose_time", json={"user_id": uid2, "when": "now"}))
     show("同意", client.post("/api/task/commit", json={"user_id": uid2, "agree": True}))
     for i in range(3):
         show(f"太重了(第{i + 1}次)", client.post("/api/step/resize", json={"user_id": uid2, "direction": "smaller"}))
     client.post("/api/task/exit", json={"user_id": uid2})
-    r = show("再背单词", client.post("/api/chat", json={"user_id": uid2, "message": "背单词"}))
+    r = show("再背单词", client.post("/api/chat", json={"user_id": uid2, "workflow": "legacy", "message": "背单词"}))
     assert r["task"]["granularity"] == "normal", "新森林按产品规则始终从中档开始，保留摩擦记录但不覆盖默认档位"
 
     # ===== 跨天温柔交接 =====
     print("\n===== 跨天温柔交接 =====")
     uid3 = f"handoff_{int(time.time())}"
     client.post("/api/session/open", json={"user_id": uid3})
-    show("写日记", client.post("/api/chat", json={"user_id": uid3, "message": "写日记"}))
+    show("写日记", client.post("/api/chat", json={"user_id": uid3, "workflow": "legacy", "message": "写日记"}))
     show("现在开始", client.post("/api/task/choose_time", json={"user_id": uid3, "when": "now"}))
     show("同意", client.post("/api/task/commit", json={"user_id": uid3, "agree": True}))
     show("完成一步", client.post("/api/step/complete", json={"user_id": uid3, "duration_ms": 30000}))

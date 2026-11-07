@@ -50,7 +50,7 @@ class AIGenerationTests(unittest.TestCase):
         self.client.close(); self.ai_patch.stop(); self.db_patch.stop(); self.tmp.cleanup()
 
     def post(self, path, **data):
-        r = self.client.post('/api/' + path, json={"user_id": self.uid, **data})
+        r = self.client.post('/api/' + path, json={"user_id": self.uid, **({"workflow":"legacy"} if path.endswith("chat") else {}), **data})
         self.assertEqual(r.status_code, 200, r.text)
         return r.json()
 

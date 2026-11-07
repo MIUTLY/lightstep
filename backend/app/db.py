@@ -15,6 +15,10 @@ from .config import settings
 from .decompose import domain_of
 
 _SCHEMA = """
+CREATE TABLE IF NOT EXISTS memo_state(user_id TEXT PRIMARY KEY, data TEXT NOT NULL);
+CREATE TABLE IF NOT EXISTS memo_operations(user_id TEXT, request_id TEXT, payload TEXT NOT NULL,
+    attempt TEXT NOT NULL, response TEXT, PRIMARY KEY(user_id,request_id));
+
 CREATE TABLE IF NOT EXISTS task_generation_drafts (
     user_id TEXT PRIMARY KEY,
     draft_json TEXT NOT NULL
@@ -247,6 +251,8 @@ class DB:
         """Atomically compare both draft and task snapshots before replacing anything."""
         with self._conn() as c:
             c.execute("BEGIN IMMEDIATE")
+            if self._memo_is_active(c, user_id):
+                return False
             row = c.execute("SELECT draft_json FROM task_generation_drafts WHERE user_id=?", (user_id,)).fetchone()
             if not row or json.loads(row[0])["generation_id"] != draft["generation_id"] or json.loads(row[0])["status"] != "generating":
                 return False
@@ -266,9 +272,17 @@ class DB:
 
     # ---------- 当前任务 ----------
 
+    def _memo_is_active(self, c, user_id):
+        row = c.execute('SELECT data FROM memo_state WHERE user_id=?', (user_id,)).fetchone()
+        return bool(row and json.loads(row[0]).get('active'))
+
     def create_active_task(self, user_id: str, title: str, levels_json: str, level: int,
                            current_idx: int = 0, steps_done: int = 0, state: str = "ready") -> None:
         with self._conn() as c:
+            c.execute("BEGIN IMMEDIATE")
+            if self._memo_is_active(c, user_id):
+                from fastapi import HTTPException
+                raise HTTPException(409, '请先结束备忘录专注。')
             c.execute(
                 "INSERT OR REPLACE INTO active_task "
                 "(user_id, title, levels_json, level, current_idx, steps_done, state, date, updated_at) "

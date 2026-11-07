@@ -34,7 +34,7 @@ class EndingIntentTests(unittest.TestCase):
         self.tmp.cleanup()
 
     def post(self, path, **payload):
-        response = self.client.post(path, json={"user_id": self.uid, **payload})
+        response = self.client.post(path, json={"user_id": self.uid, **({"workflow":"legacy"} if path.endswith("chat") else {}), **payload})
         self.assertEqual(response.status_code, 200, response.text)
         return response.json()
 

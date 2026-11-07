@@ -15,6 +15,8 @@ class UserRequest(BaseModel):
 
 class ChatRequest(UserRequest):
     message: NonEmptyText
+    workflow: Literal["today", "legacy"] = "today"
+    request_id: Optional[NonEmptyText] = None
 
 
 class GenerateTaskRequest(UserRequest):
@@ -91,3 +93,43 @@ class DailySummary(BaseModel):
 class HistoryItem(BaseModel):
     date: str
     title: str
+
+class MemoBase(UserRequest):
+    request_id: NonEmptyText
+    model_config = {'extra': 'forbid'}
+
+class MemoIntake(MemoBase):
+    action: Literal['intake']
+    text: NonEmptyText
+
+class MemoReorder(MemoBase):
+    action: Literal['reorder']
+    date: Annotated[str, StringConstraints(pattern=r'^\d{4}-\d{2}-\d{2}$')]
+    revision: Annotated[int, Field(strict=True, ge=0)]
+    item_ids: List[NonEmptyText]
+
+class MemoSelect(MemoBase):
+    action: Literal['select']
+    item_id: NonEmptyText
+    answer: Optional[NonEmptyText] = None
+
+class MemoStep(MemoBase):
+    action: Literal['complete']
+    session_id: NonEmptyText
+    step_id: NonEmptyText
+
+class MemoResize(MemoBase):
+    action: Literal['resize']
+    session_id: NonEmptyText
+    step_id: NonEmptyText
+    direction: Literal['smaller','bigger']
+
+class MemoEnd(MemoBase):
+    action: Literal['end']
+    session_id: NonEmptyText
+
+class MemoAck(MemoBase):
+    action: Literal['ack']
+    event_id: NonEmptyText
+
+MemoCommand = Annotated[MemoIntake | MemoReorder | MemoSelect | MemoStep | MemoResize | MemoEnd | MemoAck, Field(discriminator='action')]

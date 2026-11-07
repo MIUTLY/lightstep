@@ -29,7 +29,7 @@ class LLMTests(unittest.TestCase):
 
     def response(self, content, finish_reason="stop"):
         return httpx.Response(200, request=httpx.Request("POST", "https://api.deepseek.com/chat/completions"),
-            json={"choices": [{"message": {"content": content}, "finish_reason": finish_reason}]})
+            json={"choices": [{"workflow": "legacy", "message": {"content": content}, "finish_reason": finish_reason}]})
 
     def test_json_request_has_budget_and_optional_vendor_controls(self):
         response = self.response(json.dumps({"trees": [{"text": "写一段", "children": [{"text": "写一句", "children": [{"text": "开文档"}]}]}]}))
@@ -59,7 +59,7 @@ class LLMTests(unittest.TestCase):
                  patch.object(self.llm, "detect_emotion", return_value="正常"), TestClient(app) as client:
                 for index, data in enumerate(invalid):
                     with self.subTest(data=data), patch.object(self.llm, "_chat", return_value=json.dumps(data)):
-                        response = client.post("/api/chat", json={"user_id": f"invalid-{index}", "message": "写论文"})
+                        response = client.post("/api/chat", json={"user_id": f"invalid-{index}", "workflow": "legacy", "message": "写论文"})
                         self.assertEqual(response.status_code, 200)
                         self.assertEqual(response.json()["state"], "idle")
                         self.assertEqual(response.json()["generation"]["status"], "failed")

@@ -39,7 +39,7 @@ class StartReminderTests(unittest.TestCase):
         self.tmp.cleanup()
 
     def post(self, path, **payload):
-        response = self.client.post(path, json={"user_id": self.uid, **payload})
+        response = self.client.post(path, json={"user_id": self.uid, **({"workflow":"legacy"} if path.endswith("chat") else {}), **payload})
         self.assertEqual(response.status_code, 200, response.text)
         return response.json()
 
@@ -147,8 +147,8 @@ class StartReminderTests(unittest.TestCase):
         cases = [("/api/task/choose_time", {"when": "now"}),
                  ("/api/task/choose_time", {"when": "not_today"}),
                  ("/api/task/exit", {}),
-                 ("/api/chat", {"message": "今天先到这吧"}),
-                 ("/api/chat", {"message": "换成写论文"})]
+                 ("/api/chat", {"workflow": "legacy", "message": "今天先到这吧"}),
+                 ("/api/chat", {"workflow": "legacy", "message": "换成写论文"})]
         self.db.add_reminder(self.uid, "喝水", "2099-01-01T00:00:00")
         for path, payload in cases:
             with self.subTest(path=path, payload=payload):

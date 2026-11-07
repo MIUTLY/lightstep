@@ -10,7 +10,8 @@ from fastapi.staticfiles import StaticFiles
 from fastapi.responses import JSONResponse
 from .llm import AIError
 
-from . import services
+from . import services, memo
+from .schemas import MemoCommand
 from .config import settings
 from .schemas import (
     ChatRequest, ChooseTimeRequest, CommitRequest, ExitRequest,
@@ -36,12 +37,22 @@ def health():
 
 @app.post("/api/session/open")
 def open_session(req: UserRequest):
+    current = memo.load(services.db, req.user_id)
+    if current['days'] or current['active']:
+        return memo.view(current)
     return services.handle_open(req.user_id)
 
 
 @app.post("/api/chat")
 def chat(req: ChatRequest):
-    return services.handle_chat(req.user_id, req.message)
+    if req.workflow == 'legacy':
+        if memo.load(services.db, req.user_id)['active']:
+            raise HTTPException(409, '请先结束备忘录专注。')
+        return services.handle_chat(req.user_id, req.message)
+    if not req.request_id:
+        raise HTTPException(422, '今日任务识别需要request_id，重试必须复用该ID。')
+    return memo.execute(services.db, services.llm, req.user_id, req.request_id,
+                        {'action':'intake','text':req.message})
 
 
 @app.post("/api/reminders/poll")
@@ -128,6 +139,9 @@ def journal_retired():
 
 @app.get("/api/session/state")
 def session_state(user_id: UserId):
+    current = memo.load(services.db,user_id)
+    if current['days'] or current['active']:
+        return memo.view(current)
     return services.get_state(user_id)
 
 
@@ -139,6 +153,31 @@ def history(user_id: UserId):
 @app.get("/api/daily/summary")
 def daily_summary(user_id: UserId):
     return services.get_daily_summary(user_id)
+
+
+@app.get('/api/today')
+def today_memo(user_id: UserId, date: str | None = None):
+    return memo.view(memo.load(services.db,user_id),date)
+
+
+@app.get('/api/today/operations')
+def memo_operations(user_id: UserId):
+    with services.db._conn() as c:
+        rows = c.execute('SELECT request_id FROM memo_operations WHERE user_id=? ORDER BY rowid DESC LIMIT 50', (user_id,)).fetchall()
+    return [memo.operation(services.db,user_id,r[0]) for r in rows]
+
+
+@app.get('/api/today/operation')
+def memo_operation(user_id: UserId, request_id: UserId):
+    return memo.operation(services.db,user_id,request_id)
+
+
+@app.post('/api/today/command')
+def memo_command(req: MemoCommand):
+    if req.action == 'select' and services.db.get_active_task(req.user_id):
+        raise HTTPException(409, '仍有旧版任务，请先在旧流程结束它；旧数据已保留。')
+    return memo.execute(services.db,services.llm,req.user_id,req.request_id,
+                        req.model_dump(exclude={'user_id','request_id'},exclude_none=True))
 
 
 # 前端静态资源（必须在所有 API 路由之后挂载，否则会抢走 /api 路径）
