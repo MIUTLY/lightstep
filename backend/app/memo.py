@@ -70,9 +70,12 @@ def view(state, date=None):
             'today_date': current_date, 'available_dates': available_dates,
             'today_all_completed': day_completed(state['days'].get(current_date, {'items':[]})),
             'items': items, 'focus': active_item,
+            'clarifications': pending_items(state),
+            'can_enter_focus': not bool(pending_items(state)) and not bool(active),
             'all_completed': day_completed(day),
             'suggested_item_id': first['id'] if first else None,
-            'reply': (f"我们是否从【{first['title']}】开始？" if first and not active else ''),
+            'reply': (pending_items(state)[0]['question'] if pending_items(state) and not active else
+                      f"我们是否从【{first['title']}】开始？" if first and not active else ''),
             'events': [e for e in state['events'] if not e['acknowledged']]}
 
 
@@ -185,8 +188,41 @@ def execute(db, ai, uid, request_id, command):
     return response
 
 
+def clarify_item(ai, item, answer=None):
+    if answer:
+        item['answers'].append({'question':item['question'] or '请明确任务范围', 'answer':answer})
+    try:
+        item['scope'] = ai.resolve_scope(item['title'], item['answers'])
+        item['question'] = None
+    except Clarification as error:
+        item['question'] = error.question
+
+
+def pending_items(state):
+    return [{'id':i['id'], 'title':i['title'], 'question':i['question']}
+            for day in state['days'].values() for i in day['items'] if i.get('question')]
+
+
 def apply(state, ai, cmd):
     action = cmd['action']
+    if action == 'chat':
+        if state['active']:
+            raise HTTPException(409, '专注期间请使用桌宠新增入口，或先明确结束专注。')
+        routed = ai.route_message(cmd['text'], pending_items(state))
+        if routed['kind'] == 'chat':
+            return 'succeeded', routed['reply']
+        if routed['kind'] == 'answer':
+            item = find(state, routed['item_id'])[1]
+            clarify_item(ai, item, cmd['text'])
+            pending = pending_items(state)
+            return ('needs_clarification', pending[0]['question']) if pending else ('succeeded', routed['reply'])
+        status, reply = apply(state, ai, dict(cmd, action='intake'))
+        # Clarify every new task in the conversation before offering focus.
+        for item in state['days'][cmd['_date']]['items']:
+            if not item['scope'] and not item['question']:
+                clarify_item(ai, item)
+        pending = pending_items(state)
+        return ('needs_clarification', pending[0]['question']) if pending else (status, reply)
     if action == 'intake':
         date = cmd['_date']
         titles = ai.extract_tasks(cmd['text'])
@@ -212,6 +248,13 @@ def apply(state, ai, cmd):
         if state['active']:
             raise HTTPException(409, '请先结束当前专注，再选择其他任务。')
         date, item = find(state, cmd['item_id'])
+        for day in state['days'].values():
+            for candidate in day['items']:
+                if not candidate['scope'] and not candidate['question']:
+                    clarify_item(ai, candidate)
+        unresolved = [i for i in pending_items(state) if i['id'] != item['id'] or not cmd.get('answer')]
+        if unresolved:
+            return 'needs_clarification', unresolved[0]['question']
         if item['completed']:
             raise HTTPException(409, '该任务已全部完成。')
         if not item['plan']:
@@ -219,7 +262,7 @@ def apply(state, ai, cmd):
             if answer:
                 item['answers'].append({'question':item['question'] or '请补充完整任务范围', 'answer':answer})
             try:
-                scope = ai.resolve_scope(item['title'], item['answers'])
+                scope = item['scope'] if item['scope'] and not answer else ai.resolve_scope(item['title'], item['answers'])
                 blueprint = ai.decompose('必须完整覆盖以下约定范围，禁止只生成启动段：' + scope)
                 plan = task_forest.new_plan(blueprint)[task_forest.KEY]
             except Clarification as error:

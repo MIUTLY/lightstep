@@ -1,3 +1,38 @@
+# 最新交接：恢复真实AI闲聊，把任务澄清放在专注前
+
+2026-11-07。独立分支fix/chat-and-pre-focus-clarification，基于最新main b6b9d00（#15已合并为29488e7，此后主线仅修改.env.example）。实施[9ceb962eb02a75a166fbc93cf0ae7fc8008d467e](https://github.com/MIUTLY/lightstep/commit/9ceb962eb02a75a166fbc93cf0ae7fc8008d467e)。本轮不自动合并/部署。
+
+用户复现：对话页发送“你好”得到“AI返回的任务格式不合格”；写作业范围问题被展示在专注页。原因是默认/api/chat直接提交intake，所有输入均要求非空任务清单，原有reply方法没有接入新主流程。
+
+改动：app/llm.py新增真实AI对话分流协议，区分chat/tasks/answer并验证待答ID、类型及自然回复；app/main.py将默认/chat交给持久化chat操作；app/memo.py复用幂等、失败保存和revision保护，闲聊不创建任务、不改完成事实，任务先识别再问清范围，回答关联待澄清项。select兼容旧任务并检查整份未完成清单，存在问题时focus=null；已有scope不重复询问。森林生成本身若追问也留在专注前，不创建执行会话。专注中普通/chat返回409，桌宠新增协议保持原职责。
+
+返回新增clarifications/can_enter_focus；前端必须以focus非空且带session_id/step作为实际跳转条件，不能先跳转再等待澄清。专注页只显示森林和手动动作，去除普通聊天/澄清输入，桌宠仍仅新增任务。详见[chat-and-clarification.md](chat-and-clarification.md)。
+
+修改文件：backend/app/llm.py、main.py、memo.py；test_chat_routing.py新增8项，test_memo.py更新显式测试替身分流及单项澄清断言；根/后端README、api、requirements、architecture、today-memo及新增专题协议。未改frontend或backend/static。
+
+核对主线发现.env.example被填入疑似真实密钥，本修复恢复为空，不在文档/报告中复述密钥。提交历史已包含该值，维护者需要立即在供应商后台撤销/轮换；移除示例值不能撤销旧密钥。
+
+验证命令（backend目录）：
+```bash
+python -m unittest discover -s . -p 'test_*.py'
+python -m unittest -v test_chat_routing
+python smoke_test.py
+```
+本云环境沿用仓库外TestClient selector辅助，根目录实际命令：
+```bash
+PYTHONDONTWRITEBYTECODE=1 PYTHONPATH=/workspace/work/pr8-runtime:/workspace/work:backend timeout 90s python -m unittest discover -s backend -p 'test_*.py'
+PYTHONDONTWRITEBYTECODE=1 PYTHONPATH=/workspace/work/pr8-runtime:/workspace/work:backend timeout 30s python -m unittest -v test_chat_routing
+PYTHONDONTWRITEBYTECODE=1 PYTHONPATH=/workspace/work/pr8-runtime:/workspace/work:backend timeout 30s python backend/smoke_test.py
+git diff --check
+```
+153项全部通过（39.541s，原145+新增8）；最后补强非法item_id类型校验后8项专项重新通过（0.851s），隔离SQLite冒烟、Python AST及diff检查通过。测试覆盖问候、普通闲聊不改旧任务、重复请求不重复AI、范围不清时在对话追问、回答后才可专注、明确目标不强制追问、所有任务问清、失败可重试、专注禁止普通聊天以及真实适配器协议非法类型/ID/JSON拒绝。测试均显式隔离替身，不表示真实供应商自然语言质量已验收。
+
+未完成：前端须按新字段和focus条件在对话页提问/接收回答，专注页删除常规询问/输入，仅保留森林操作和桌宠；本轮未代改，微信页面及真实供应商质量未验收。桌宠新任务的范围可回到对话页后再澄清，不把桌宠当当前任务答疑入口。密钥轮换由供应商账户维护者完成。README和接口文档已同步，新PR待检查，不自动合并。
+
+---
+
+以下为历史交接。
+
 # 最新交接：取消任务计时，跨天保留未完成任务，完成移出备忘录
 
 2026-11-07。基于最新main `626ff302d0d5ad874f9895628cc6e17c13338957`（#14已合并），独立分支`refactor/manual-task-lifecycle`。业务与协议提交：[5cd6a1e7c5a148976d443be39bb148c577a7ef89](https://github.com/MIUTLY/lightstep/commit/5cd6a1e7c5a148976d443be39bb148c577a7ef89)。本轮不自动合并或部署。

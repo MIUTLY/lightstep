@@ -19,6 +19,7 @@ def ten():
     return {'trees':[{'text':'完成十题','children':[{'text':f'做第{i}题','children':[{'text':f'完成第{i}题'}]} for i in range(1,11)]}]}
 
 class Fake:
+    def route_message(self,text,pending): return {'kind':'tasks','reply':'记下了。','item_id':None}
     calls=0
     def extract_tasks(self,text): return ['写作业','看论文','洗衣服']
     def resolve_scope(self,title,answers): return title+'：完成约定的十题'
@@ -166,7 +167,8 @@ class MemoTests(unittest.TestCase):
             r=self.op('select',item_id=r['items'][0]['id'])
         self.assertEqual(self.state(),before);self.assertEqual(r['operation']['status'],'failed')
     def test_clarification_before_focus(self):
-        r=self.op('intake',text='三件事');item=r['items'][0]['id']
+        with patch.object(self.ai,'extract_tasks',return_value=['写作业']):r=self.op('intake',text='写作业')
+        item=r['items'][0]['id']
         with patch.object(self.ai,'resolve_scope',side_effect=Clarification('哪份作业，多少题？')):
             r=self.op('select',item_id=item)
         self.assertIsNone(r['focus']);self.assertEqual(r['operation']['status'],'needs_clarification')
