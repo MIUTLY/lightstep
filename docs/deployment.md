@@ -2,7 +2,7 @@
 
 ## 开发
 
-在 backend/ 创建并激活虚拟环境，然后安装 requirements.txt。将 .env.example 复制为 .env，默认 LLM_PROVIDER=mock，无需真实模型密钥。
+在 backend/ 创建并激活虚拟环境，然后安装 requirements.txt。将 .env.example 复制为 .env，默认LLM_PROVIDER=openai，实际生成任务必须在后端配置真实供应商。缺配置仍可启动及操作已有任务，不会生成模板任务。
 
 ```bash
 cd backend
@@ -22,7 +22,7 @@ python run.py
 | LIGHTSTEP_SERVE_DEBUG_UI | true | 独立部署 API 时设false，根路径返回404，/api与/docs保持可用 |
 | LIGHTSTEP_CORS_ORIGINS | http://localhost:5173,http://127.0.0.1:5173 | 逗号分隔的浏览器前端来源，上线填写实际来源 |
 | LIGHTSTEP_DB | lightstep.db | SQLite 文件路径，部署时指定可写的持久目录；父目录须预先存在 |
-| LLM_PROVIDER | mock | 接真实模型时设openai并填写供应商配置 |
+| LLM_PROVIDER | openai | 唯一运行提供方；填写真实供应商配置，mock不受支持 |
 
 服务端配置密钥不能放前端、仓库或客户端配置。现有 user_id 是演示标识，当前部署不代表已完成正式多用户权限方案。
 
@@ -43,10 +43,10 @@ python -m unittest -v test_storage_boundary.py
 node --test test_local_journal.cjs
 ```
 
-storage boundary 测试自动使用临时数据库。运行原有 smoke_test.py 前，通过 LIGHTSTEP_DB 指向独立临时数据库、LLM_PROVIDER=mock，不使用队员业务数据库。浏览器本地手帐在同一浏览器、同一来源下保存，不自动同步。
+storage boundary 测试自动使用临时数据库。smoke_test.py自动使用独立临时SQLite和显式测试替身，不使用队员业务数据库，不验证真实AI。浏览器本地手帐在同一浏览器、同一来源下保存，不自动同步。
 
 旧数据库中的 journal 表不会被自动删除或迁出，相关 HTTP 接口已停用。若需要清理或导出旧数据，先确认处理范围并备份，另开迁移任务。
 
 ## 模型接入验证
 
-服务端配置示例及实际验证结果见 [ai-integration.md](ai-integration.md)。运行 python check_llm.py 显式测试真实模型，不依赖应用离线回退；--task额外调用一次任务拆解。支持 LLM_MAX_TOKENS 与可选 LLM_THINKING。回归检查可运行 python -m unittest -v test_llm.py test_storage_boundary.py。
+服务端配置示例及实际验证结果见 [ai-integration.md](ai-integration.md)。运行 python check_llm.py 显式测试真实模型，不依赖应用离线回退；--task额外调用森林生成和内容复核（两次请求）。支持 LLM_MAX_TOKENS 与可选 LLM_THINKING。回归检查可运行 python -m unittest -v test_llm.py test_storage_boundary.py。

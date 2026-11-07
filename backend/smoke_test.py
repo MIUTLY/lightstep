@@ -1,14 +1,22 @@
-"""轻步 LightStep 后端冒烟测试（离线，无需 key）。
+"""轻步 LightStep 后端冒烟测试（显式注入测试替身，不验证真实AI）。
 
 跑一遍现有任务流程、摩擦地图与跨天交接；确认服务端手帐已停用。
 """
+import os
+from pathlib import Path
+import tempfile
 import sys
 import time
+from unittest.mock import patch
+from tests.fakes import MockLLM
 from datetime import datetime, timedelta
 
 sys.stdout.reconfigure(encoding="utf-8")
 
 from fastapi.testclient import TestClient
+
+_smoke_dir = tempfile.TemporaryDirectory(prefix="lightstep-smoke-")
+os.environ["LIGHTSTEP_DB"] = str(Path(_smoke_dir.name) / "smoke.db")
 
 from app.main import app
 from app.db import db
@@ -84,4 +92,9 @@ def main():
 
 
 if __name__ == "__main__":
-    main()
+    try:
+        with patch("app.services.llm", MockLLM()):
+            main()
+    finally:
+        client.close()
+        _smoke_dir.cleanup()

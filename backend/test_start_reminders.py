@@ -9,11 +9,11 @@ from unittest.mock import patch
 
 _boot = tempfile.TemporaryDirectory(prefix="lightstep-schedule-boot-")
 os.environ["LIGHTSTEP_DB"] = str(Path(_boot.name) / "boot.db")
-os.environ["LLM_PROVIDER"] = "mock"
+os.environ["LLM_PROVIDER"] = "openai"
 
 from fastapi.testclient import TestClient
 from app.db import DB
-from app.llm import MockLLM
+from tests.fakes import MockLLM
 from app.main import app
 
 

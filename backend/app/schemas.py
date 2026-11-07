@@ -17,6 +17,18 @@ class ChatRequest(UserRequest):
     message: NonEmptyText
 
 
+class GenerateTaskRequest(UserRequest):
+    goal: NonEmptyText
+
+
+class GenerationRetryRequest(UserRequest):
+    generation_id: NonEmptyText
+
+
+class GenerationAnswerRequest(GenerationRetryRequest):
+    answer: NonEmptyText
+
+
 class ChooseTimeRequest(UserRequest):
     when: Literal["now", "in_5_minutes", "in_10_minutes", "later", "not_today"]
 
@@ -67,6 +79,7 @@ class Reply(BaseModel):
     notes_to_recall: List[str] = []
     due_reminders: List[str] = []
     summary: Optional[str] = None
+    generation: Optional[dict] = None
 
 
 class DailySummary(BaseModel):

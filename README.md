@@ -37,9 +37,9 @@ pip install -r requirements.txt
 python run.py
 ```
 
-调试页：http://127.0.0.1:8000 ，接口文档：http://127.0.0.1:8000/docs 。默认 LLM_PROVIDER=mock，无需真实密钥；配置示例为 backend/.env.example。
+调试页：http://127.0.0.1:8000 ，接口文档：http://127.0.0.1:8000/docs 。默认 LLM_PROVIDER=openai，生成任务前必须配置真实AI；缺配置或调用失败明确提示并保留旧任务，不使用离线模板。配置示例为 backend/.env.example。
 
-测试在 backend/ 内运行 python smoke_test.py，先通过 LIGHTSTEP_DB 指向独立临时数据库。更多说明见 [backend/README.md](backend/README.md)。
+测试在 backend/ 内运行 python smoke_test.py，脚本自动创建临时SQLite并显式注入测试替身，不验证真实AI。更多说明见 [backend/README.md](backend/README.md)。
 
 ## 一起开发
 

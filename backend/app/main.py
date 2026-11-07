@@ -7,13 +7,15 @@ import os
 from fastapi import FastAPI, HTTPException
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.staticfiles import StaticFiles
+from fastapi.responses import JSONResponse
+from .llm import AIError
 
 from . import services
 from .config import settings
 from .schemas import (
     ChatRequest, ChooseTimeRequest, CommitRequest, ExitRequest,
     NoteRequest, StepCompleteRequest, StepResizeRequest,
-    UserId, UserRequest,
+    UserId, UserRequest, GenerateTaskRequest, GenerationRetryRequest, GenerationAnswerRequest,
 )
 
 app = FastAPI(title="轻步 LightStep", description="AI 学习搭子「小步」后端")
@@ -45,6 +47,32 @@ def chat(req: ChatRequest):
 @app.post("/api/reminders/poll")
 def poll_reminders(req: UserRequest):
     return services.poll_start_reminder(req.user_id)
+
+
+@app.exception_handler(AIError)
+async def ai_error_handler(request, error):
+    # Existing frontend displays a string detail. Task generation itself returns a Reply with draft status.
+    return JSONResponse(status_code=error.status, content={"detail": error.message, "code": error.code, "retryable": True})
+
+
+@app.post("/api/task/generate")
+def generate_task(req: GenerateTaskRequest):
+    return services._create_task(req.user_id, req.goal)
+
+
+@app.get("/api/task/generation")
+def generation_status(user_id: UserId):
+    return {"generation": services.generation_status(user_id)}
+
+
+@app.post("/api/task/generation/retry")
+def retry_generation(req: GenerationRetryRequest):
+    return services.retry_generation(req.user_id, req.generation_id)
+
+
+@app.post("/api/task/generation/answer")
+def answer_generation(req: GenerationAnswerRequest):
+    return services.retry_generation(req.user_id, req.generation_id, req.answer)
 
 
 @app.post("/api/task/choose_time")

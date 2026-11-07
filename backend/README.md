@@ -16,7 +16,7 @@ AI 学习搭子「小步」—— 一只懒洋洋的黑猫，帮你把「动一�
 - [需求边界与待定产品规则](../docs/requirements.md)
 - [团队与 Codex 协作约定](../AGENTS.md)
 
-已有离线任务流程和网页调试页；DeepSeek真实调用及项目任务创建已验证；对话质量、小程序联调与部署仍待验证。
+已有任务流程和网页调试页；运行只使用真实AI，未配置也可启动服务和操作已有任务，新生成必须配置AI。历史DeepSeek连通测试不代表当前森林协议已完成实测。
 任务保护、参数/状态校验、粒度跳步和自然收尾已有修复分支；当前合并状态与剩余任务以交接记录为准。
 后续按任务开分支并提交 PR，由另一位队员检查后合并。
 
@@ -26,10 +26,10 @@ AI 学习搭子「小步」—— 一只懒洋洋的黑猫，帮你把「动一�
 cd backend
 pip install -r requirements.txt
 python run.py            # 启动于 http://127.0.0.1:8000
-python smoke_test.py     # 跑一遍全流程冒烟测试（离线、无需 key）
+python smoke_test.py     # 显式注入测试替身和临时SQLite的流程冒烟，不验证真实AI
 ```
 
-默认 **离线模式**（`LLM_PROVIDER=mock`）：任务拆解用预设模板、情绪用规则识别，无需任何 API key 即可跑通全流程。接真 LLM 时复制 `.env.example` 为 `.env`，改 `LLM_PROVIDER=openai` 并填 key 即可（OpenAI 兼容，DeepSeek / 豆包 / OpenAI 均可）。
+默认且唯一支持的提供方是`LLM_PROVIDER=openai`。复制`.env.example`为`.env`并在后端填写真实供应商地址、模型、密钥。缺配置、超时或非法返回明确失败，保留输入和旧任务，不使用模板兜底。`LLM_PROVIDER=mock`也不能生成任务。详见[生成与重试协议](../docs/ai-task-generation.md)。
 
 ## 核心能力
 
@@ -96,7 +96,7 @@ backend/
 │   ├── schemas.py       # 请求/响应模型
 │   ├── db.py            # SQLite 存储
 │   ├── persona.py       # 小步人设文案
-│   ├── decompose.py     # 离线拆解 + 情绪识别 + 领域识别
+│   ├── decompose.py     # 仅领域识别，不生成任务
 │   ├── granularity.py   # 自适应粒度引擎
 │   ├── step_plan.py     # 旧任务有序队列兼容
 │   ├── task_forest.py   # 新任务三层森林、剩余内容与叶子进度
@@ -122,17 +122,17 @@ backend/
 
 ## 真实AI检测
 
-接入步骤和本次实测结果见 [AI接入说明](../docs/ai-integration.md)。服务端设置模型地址、名称及密钥后，运行 python check_llm.py；加 --task 额外验证一次任务拆解。不使用离线兜底，失败会返回非零退出码。默认示例使用 deepseek-flash、LLM_THINKING=disabled、LLM_MAX_TOKENS=1024；三层拆分单独使用LLM_DECOMPOSE_MAX_TOKENS=4096。使用其他供应商时按其协议修改，密钥不入库。
+接入步骤和本次实测结果见 [AI接入说明](../docs/ai-integration.md)。服务端设置模型地址、名称及密钥后，运行 python check_llm.py；加 --task 额外验证任务森林生成与语义复核（两次请求）。不使用离线兜底，失败会返回非零退出码。默认示例使用 deepseek-flash、LLM_THINKING=disabled、LLM_MAX_TOKENS=1024；三层拆分单独使用LLM_DECOMPOSE_MAX_TOKENS=4096。使用其他供应商时按其协议修改，密钥不入库。
 
 模型回归检查：python -m unittest -v test_llm.py test_storage_boundary.py。
 
-后端回归（backend目录、mock及独立临时数据库）：
+后端回归（backend目录、显式注入测试替身及独立临时数据库）：
 
 ```bash
-python -m unittest -v test_task_forest.py test_step_plan.py test_llm.py test_task_flow.py test_start_reminders.py test_ending_intent.py test_storage_boundary.py
+python -m unittest discover -s . -p "test_*.py" -v
 python smoke_test.py
 ```
 
-本轮84项通过，含26项新森林回归及旧队列、参数、情绪收尾、模型、存储边界和预约回归。前端/网页静态文件本轮未修改，前端行为由对应成员验收。
+本轮测试结果见[最新交接](../docs/handoff.md)，覆盖AI失败/重试/澄清及旧森林、旧队列、参数、情绪收尾、存储边界和预约回归。前端/网页静态文件本轮未修改，前端行为由对应成员验收。
 
-本轮切换协议为嵌套trees，check_llm.py --task验证真实森林输出（不允许离线冒充）。本轮只跑了mock/模拟供应商的回归，未使用真实密钥或声称新协议已完成供应商语义验收。
+本轮切换协议为嵌套trees，check_llm.py --task验证真实森林输出（不允许离线冒充）。本轮只跑了显式注入的测试替身/模拟供应商回归，未使用真实密钥或声称新协议已完成供应商语义验收。
