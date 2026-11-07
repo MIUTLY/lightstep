@@ -39,7 +39,9 @@ python smoke_test.py     # 跑一遍全流程冒烟测试（离线、无需 key�
 - 卡得久（> 90s）→ 启动吃力，下一步**拆细**
 - 中间 → 保持
 
-三档粒度：细 / 中 / 粗。新任务以 normal 清单作为一条有序路线；粗档合并相邻两个待做动作，细档对当前动作做可确认的数量或并列拆分。完成只推进刚展示过的动作，不再在三份清单间按比例换位置。无法安全拆分时保持原文，不额外调用模型；结束提示只表示本次小段结束，不承诺整个大目标完成。旧任务沿用其当前清单和位置。
+新任务以[三层任务森林](../docs/task-forest.md)保存轻/中/重对应关系，默认第一个中任务。主动调整逐档选对应父/子节点，进度只由最小叶子完成集合决定，切换不算完成，部分完成的父任务只要求剩余内容。一次生成后不重新请求AI；完成后保持当前档位进入下一段，不按耗时覆盖主动选择。耗时仍可记录摩擦反馈。
+
+旧三清单与_step_plan有序队列保留兼容，不猜测转换；旧任务沿用原有耗时调整逻辑。完成提示只表示本次生成步骤做完，不声称长期目标全部完成。
 
 ### 2. 两段式情绪提示
 先识别情绪（焦虑 / 低落 / 正常 / 亢奋），再决定回复语气；接真 LLM 时拆成两次调用。
@@ -96,7 +98,8 @@ backend/
 │   ├── persona.py       # 小步人设文案
 │   ├── decompose.py     # 离线拆解 + 情绪识别 + 领域识别
 │   ├── granularity.py   # 自适应粒度引擎
-│   ├── step_plan.py     # 有序动作队列与稳定步骤标识
+│   ├── step_plan.py     # 旧任务有序队列兼容
+│   ├── task_forest.py   # 新任务三层森林、剩余内容与叶子进度
 │   ├── prompts.py       # LLM 提示词
 │   ├── llm.py           # Mock / OpenAI 兼容 LLM
 │   ├── services.py      # 核心编排
@@ -119,8 +122,17 @@ backend/
 
 ## 真实AI检测
 
-接入步骤和本次实测结果见 [AI接入说明](../docs/ai-integration.md)。服务端设置模型地址、名称及密钥后，运行 python check_llm.py；加 --task 额外验证一次任务拆解。不使用离线兜底，失败会返回非零退出码。默认示例使用 deepseek-flash、LLM_THINKING=disabled、LLM_MAX_TOKENS=1024。使用其他供应商时按其协议修改，密钥不入库。
+接入步骤和本次实测结果见 [AI接入说明](../docs/ai-integration.md)。服务端设置模型地址、名称及密钥后，运行 python check_llm.py；加 --task 额外验证一次任务拆解。不使用离线兜底，失败会返回非零退出码。默认示例使用 deepseek-flash、LLM_THINKING=disabled、LLM_MAX_TOKENS=1024；三层拆分单独使用LLM_DECOMPOSE_MAX_TOKENS=4096。使用其他供应商时按其协议修改，密钥不入库。
 
 模型回归检查：python -m unittest -v test_llm.py test_storage_boundary.py。
 
-后端回归：python -m unittest -v test_start_reminders.py test_ending_intent.py test_step_plan.py test_task_flow.py test_llm.py test_storage_boundary.py（56项）。仓库根目录运行 node --test frontend/tests/stepIdentity.test.mjs backend/test_local_journal.cjs（6项，尚不含新增预约前端行为）。这些检查不代表小程序构建或真机联调完成。
+后端回归（backend目录、mock及独立临时数据库）：
+
+```bash
+python -m unittest -v test_task_forest.py test_step_plan.py test_llm.py test_task_flow.py test_start_reminders.py test_ending_intent.py test_storage_boundary.py
+python smoke_test.py
+```
+
+本轮84项通过，含26项新森林回归及旧队列、参数、情绪收尾、模型、存储边界和预约回归。前端/网页静态文件本轮未修改，前端行为由对应成员验收。
+
+本轮切换协议为嵌套trees，check_llm.py --task验证真实森林输出（不允许离线冒充）。本轮只跑了mock/模拟供应商的回归，未使用真实密钥或声称新协议已完成供应商语义验收。

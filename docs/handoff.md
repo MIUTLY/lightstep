@@ -1,3 +1,45 @@
+# 最新交接：后端三层任务森林与对应轻重切换
+
+日期：2026-11-07（北京时间）。按用户新规则另开feat/task-forest，基于main 7f75a7dc7c4c310050f10f23cf6378f2f20f5ebc。本轮只修改后端及文档，不合并PR #10、不带入计时/回执/手帐/前端改动。新PR提交后供审查，不直接合并。
+
+实施提交：[c405a78d2b4c7b3a8b1fbc15ba58aacef836fd41](https://github.com/MIUTLY/lightstep/commit/c405a78d2b4c7b3a8b1fbc15ba58aacef836fd41)。数据结构、接口示例和场景映射见[task-forest.md](task-forest.md)。
+
+## 改了什么、依据与原因
+
+- 新增backend/app/task_forest.py：模型三层嵌套结构校验、服务端稳定ID、根/父子关系、当前节点、已完成叶子集合。中档默认，逐档找对应父/第一个未完成子，不用比例或临时重拆。父任务显示实际叶子范围，部分完成只列剩余内容。
+- services.py、schemas.py、main.py：新任务生成森林；完成只消费当前显示的剩余叶子，下一段保持当前档位。新增node_id/parent_id/remaining_leaf_ids/plan_format元数据，保留原字段、接口和旧任务路径。两个写接口可带step_id，旧视图返回409；未带仍兼容但不承诺重试幂等。
+- db.py：森林计划及完成计数在同一SQLite事务比较并提交，过期快照不能覆盖新完成集合；无表迁移、不删除旧任务/历史数据。
+- decompose.py、prompts.py、llm.py、config.py、check_llm.py及.env.example：一次生成整棵三层关系，模型非法结构降级到合法离线森林。单独增加拆分输出预算4096，普通聊天预算不变。示例中的既有疑似密钥值已清空，未使用；历史若仍有效需更换。
+- 新增backend/test_task_forest.py共26项；原test_step_plan改为明确构造旧队列，保留其12项兼容断言；存储边界测试按公开完成流程验证，模型协议和冒烟默认档位断言按新规则更新。
+- 更新backend/README、docs/requirements、api、handoff、task-forest协议及CODEX_HANDOFF。所有frontend及backend/static文件逐blob核对不变。
+
+## 验证命令与结果
+
+backend目录可按下列清单复核，mock、独立临时SQLite：
+
+```bash
+python -m unittest -v test_task_forest.py test_step_plan.py test_llm.py test_task_flow.py test_start_reminders.py test_ending_intent.py test_storage_boundary.py
+python smoke_test.py
+```
+
+- 最终实际命令在仓库根目录执行：PYTHONDONTWRITEBYTECODE=1 PYTHONPATH=/workspace/work/pr8-runtime:/workspace/work:backend LLM_PROVIDER=mock LIGHTSTEP_DB=/workspace/work/forest-boot.db python -m unittest discover -s backend -p 'test_*.py' -v。84项后端回归通过，原始mock冒烟按新默认中档规则更新后通过。用户八个重点场景全部覆盖：往返切档、完成后加重不重做、对应轻任务起点、父任务剩余内容、多次切换进度不变、完成父后不再出现子、跨树推进、重开/数据库重启恢复。
+- 另覆盖40种固定种子变形森林的随机切换/完成轨迹、模型坏结构/深度/分支/总量限制、并发相同token只能完成一批、过时快照拒绝、旧三清单/队列、跨天沿现有handoff恢复、开始前调整与预约保留。
+- 当前云环境TestClient仍需仓库外sitecustomize/loop_factory唤醒适配；实际命令加PYTHONPATH=/workspace/work/pr8-runtime:/workspace/work:.、PYTHONDONTWRITEBYTECODE=1。未把环境适配加入仓库或修改断言；日志/workspace/work/forest-suite-final.log、forest-smoke.log。
+- Python源码ast解析、git diff --check通过。新模型结构的真实供应商调用、语义覆盖质量及小程序联调未验证；前端由其他成员负责，没有重跑前端50项而宣称平台通过。
+
+## 兼容与未完成项
+
+- JSON格式独立为_task_forest/version=1；旧三清单和_step_plan/version=1不推测父子关系，继续按原路线/进度操作。数据库没有结构迁移，不能识别的已存森林409并保留。
+- 新森林始终中档起步，完成后保持用户当前档位；耗时仅沉淀反馈。既有旧任务的自动调档继续兼容；这是产品新规则覆盖旧默认档位偏好的结果。
+- 结构能保证每个叶子唯一归属、完成覆盖与显示范围一致；真实模型的自然语言是否完整/等价覆盖用户目标还需真实样本核验。离线未知领域只提供明确的启动段；背词离线数字范围为阿拉伯数字且本次最多100个，不声称长期目标完成。
+- step_id可拒绝旧页面请求，事务可防止旧计划写回，但未携带token的客户端仍不具备重试幂等。前端成员应按接口文档接入token与最终按钮布局。
+- 同日重开、数据库重启及有进度的既有跨天handoff均验证；原跨天清理与日志保留政策未改变，也未删除原journal。
+- PR #10及其微信端验收由原分支/前端成员继续；本轮不混入。任何真实密钥应只放后端环境，示例中的旧值不再保留于本轮文件，但历史公开值须由用户轮换。
+
+以下为历史记录，父子拆分新规则以本节和任务森林协议为准。
+
+---
+
 # PR #8 合并授权更新
 
 2026-11-07（北京时间）：用户在知悉未完成项后明确要求合并 [PR #8](https://github.com/MIUTLY/lightstep/pull/8)，本次按此指令转为正式 PR 并合入 main；下文上一轮“保持草稿、不合并”为当时范围，已由此指令更新。没有补做或虚构队员评审、CI、微信编译和真机验收。

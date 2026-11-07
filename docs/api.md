@@ -39,9 +39,34 @@ uni-app对话页仅在可见、ready且存在start_due_at时立即检查并每15
 
 ## 粒度调整与完成
 
-新任务保存 normal 清单为有序路线。粗档最多展示相邻两个动作，细档只拆当前待做动作；已完成前缀不变，剩余动作不因档位改变被丢弃。完成消费当前实际展示的动作，再按耗时辅助判断下一步大小。steps_done 仍是完成请求次数，不是原始动作数量或总目标完成百分比。
+新任务使用三层任务森林，默认中档。轻/中/重仍对应既有granularity的fine/normal/coarse；请求direction仍为smaller/bigger。加重选父节点，减轻选对应节点下第一个未完成子节点；完成集合不会因为调整改变。完成父任务只消费它剩余的叶子，然后在当前档位找下一段，第一棵完成后继续下一棵。新森林的耗时不自动覆盖当前档位。
 
-拆小支持可确认的数量和并列动作；条件、否定、序号、分数和范围等不确定文本保持原样，不调用模型猜测改写。队列耗尽仅表示这次小段结束，不证明AI或模板已经覆盖用户整个目标。SQLite表不变，队列元数据保存在既有levels_json中；旧任务首次写入时沿用当时清单和游标，不追补已经跳过的历史动作。
+完整父任务的current_step包含本次叶子明细，部分完成时仅列剩余叶子，避免重做。旧三清单及_step_plan队列继续兼容，不猜测父子关系、不整体迁移；旧任务依然可打开、操作和交接。详见[任务森林协议](task-forest.md)。
+
+TaskView保留title/current_step/state/granularity/steps_done/step_id/start_due_at，并新增：
+
+| 字段 | 新任务 | 旧任务 |
+| --- | --- | --- |
+| plan_format | forest_v1 | legacy |
+| node_id | 当前节点的任务内稳定ID | null |
+| parent_id | 父节点ID，重档为null | null |
+| remaining_leaf_ids | 本次操作覆盖的剩余叶子ID，仅当前节点范围 | [] |
+
+steps_done仍为完成请求次数，不是叶子数量或目标完成率。step_id包含任务身份、节点及剩余范围：同一范围刷新不变，部分完成后范围改变则变化。客户端以current_step作为本次执行文案，不用完整父标题重新构造已做内容。
+
+POST /api/step/resize和/api/step/complete新增可选step_id，值为显示时收到的TaskView.step_id。过时token返回409 STALE_TASK_STEP且无任务/计数/摩擦写入。未传token的旧客户端继续按服务端当前步骤处理；它不具备网络重试幂等保证。新森林并发提交还以SQLite事务比较完整任务快照，避免旧调整覆盖新进度。该保护不等于全部接口都有幂等/任务版本。
+
+```json
+{"user_id":"demo","direction":"bigger","step_id":"显示时的step_id"}
+```
+
+```json
+{"user_id":"demo","duration_ms":30000,"step_id":"显示时的step_id"}
+```
+
+新森林执行态按钮返回“轻一点/完成这一步/重一点/今天到这吧”。/api/chat也识别“轻一点”“重一点”及既有太重/太简单别名；前端成员负责最终按钮排版，后端不修改客户端代码。ready/committing的开始流程和结束入口保留。
+
+无法识别的已存森林版本返回409 INVALID_TASK_PLAN并保留原记录，不降级成新任务或删除。模型坏结构在入库前校验并降级到有关系的离线模板，不把不合法森林存入活动任务。
 
 ## 手帐接口迁移
 
