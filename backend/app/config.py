@@ -47,14 +47,23 @@ class Settings:
     llm_provider: str = "mock"
     llm_base_url: str = "https://api.deepseek.com"
     llm_api_key: str = ""
-    llm_model: str = "deepseek-chat"
+    llm_model: str = "deepseek-flash"
     llm_temperature: float = 0.7
     llm_timeout: float = 30.0
+    llm_max_tokens: int = 1024
+    # 留空时不发送供应商扩展参数；DeepSeek 可配置 disabled / enabled。
+    llm_thinking: str = ""
     # 数据
     db_path: str = "lightstep.db"
     # 自适应粒度阈值（秒）
     fast_threshold: float = 15.0
     slow_threshold: float = 90.0
+
+    def __post_init__(self):
+        if self.llm_thinking not in ("", "enabled", "disabled"):
+            raise ValueError("LLM_THINKING must be empty, enabled or disabled")
+        if self.llm_max_tokens <= 0:
+            raise ValueError("LLM_MAX_TOKENS must be positive")
 
     @classmethod
     def from_env(cls) -> "Settings":
@@ -69,9 +78,11 @@ class Settings:
             llm_provider=os.getenv("LLM_PROVIDER", "mock").strip().lower(),
             llm_base_url=os.getenv("LLM_BASE_URL", "https://api.deepseek.com").strip(),
             llm_api_key=os.getenv("LLM_API_KEY", "").strip(),
-            llm_model=os.getenv("LLM_MODEL", "deepseek-chat").strip(),
+            llm_model=os.getenv("LLM_MODEL", "deepseek-flash").strip(),
             llm_temperature=float(os.getenv("LLM_TEMPERATURE", "0.7")),
             llm_timeout=float(os.getenv("LLM_TIMEOUT", "30")),
+            llm_max_tokens=int(os.getenv("LLM_MAX_TOKENS", "1024")),
+            llm_thinking=os.getenv("LLM_THINKING", "").strip().lower(),
             db_path=_resolve_db_path(os.getenv("LIGHTSTEP_DB", "lightstep.db")),
             fast_threshold=float(os.getenv("FAST_THRESHOLD", "15")),
             slow_threshold=float(os.getenv("SLOW_THRESHOLD", "90")),

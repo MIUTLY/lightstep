@@ -14,7 +14,7 @@ AI 学习搭子「小步」—— 一只懒洋洋的黑猫，帮你把「动一�
 - [需求边界与待定产品规则](../docs/requirements.md)
 - [团队与 Codex 协作约定](../AGENTS.md)
 
-已有离线任务流程和网页调试页；真实模型效果、小程序联调与部署尚未验证。
+已有离线任务流程和网页调试页；DeepSeek真实调用及项目任务创建已验证；对话质量、小程序联调与部署仍待验证。
 优先处理跳步、便签状态不一致、提问覆盖任务、参数校验和模型异常兜底。
 后续按任务开分支并提交 PR，由另一位队员检查后合并。
 
@@ -110,3 +110,9 @@ backend/
 
 后端边界回归：python -m unittest -v test_storage_boundary.py。
 本地手帐回归：node --test test_local_journal.cjs。
+
+## 真实AI检测
+
+接入步骤和本次实测结果见 [AI接入说明](../docs/ai-integration.md)。服务端设置模型地址、名称及密钥后，运行 python check_llm.py；加 --task 额外验证一次任务拆解。不使用离线兜底，失败会返回非零退出码。默认示例使用 deepseek-flash、LLM_THINKING=disabled、LLM_MAX_TOKENS=1024。使用其他供应商时按其协议修改，密钥不入库。
+
+模型回归检查：python -m unittest -v test_llm.py test_storage_boundary.py。

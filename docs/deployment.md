@@ -46,3 +46,7 @@ node --test test_local_journal.cjs
 storage boundary 测试自动使用临时数据库。运行原有 smoke_test.py 前，通过 LIGHTSTEP_DB 指向独立临时数据库、LLM_PROVIDER=mock，不使用队员业务数据库。浏览器本地手帐在同一浏览器、同一来源下保存，不自动同步。
 
 旧数据库中的 journal 表不会被自动删除或迁出，相关 HTTP 接口已停用。若需要清理或导出旧数据，先确认处理范围并备份，另开迁移任务。
+
+## 模型接入验证
+
+服务端配置示例及实际验证结果见 [ai-integration.md](ai-integration.md)。运行 python check_llm.py 显式测试真实模型，不依赖应用离线回退；--task额外调用一次任务拆解。支持 LLM_MAX_TOKENS 与可选 LLM_THINKING。回归检查可运行 python -m unittest -v test_llm.py test_storage_boundary.py。
