@@ -61,7 +61,7 @@ def step_next_aside(direction: str) -> str:
 
 
 def all_done(title: str, steps_done: int) -> str:
-    return f"「{title}」做完了。够了，去休息吧。"
+    return "这一小段先到这。想继续再来。"
 
 
 def gentle_end(what: str) -> str:
@@ -82,7 +82,7 @@ def grow() -> str:
 
 def boundary(direction: str) -> str:
     if direction == "down":
-        return "已经是最小步了，再小就只是动一下手指。就做这一下，好不好？"
+        return "这一步先保持原样，不急。"
     return "再大就太吓人了。就这样，正好。"
 
 

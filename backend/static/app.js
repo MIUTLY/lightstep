@@ -90,8 +90,9 @@ function systemNote(text) {
 
 function handleTaskTiming(task) {
   if (task && task.state === "executing") {
-    if (task.current_step !== lastStep) {
-      lastStep = task.current_step;
+    const key = task.step_id || task.title + "|" + task.current_step;
+    if (key !== lastStep) {
+      lastStep = key;
       stepStartedAt = Date.now();
     }
   } else {
