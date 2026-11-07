@@ -1,5 +1,7 @@
 """启动入口：python run.py"""
 import uvicorn
+from app.config import settings
 
 if __name__ == "__main__":
-    uvicorn.run("app.main:app", host="127.0.0.1", port=8000, reload=True)
+    uvicorn.run("app.main:app", host=settings.server_host, port=settings.server_port,
+                reload=settings.server_reload)

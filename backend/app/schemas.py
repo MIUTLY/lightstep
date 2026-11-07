@@ -45,11 +45,6 @@ class NoteRequest(BaseModel):
     content: str
 
 
-class JournalAddRequest(BaseModel):
-    user_id: str
-    note: str = ""
-
-
 # ---------- 响应 ----------
 
 class TaskView(BaseModel):
@@ -79,12 +74,3 @@ class DailySummary(BaseModel):
 class HistoryItem(BaseModel):
     date: str
     title: str
-
-
-class JournalEntry(BaseModel):
-    id: int
-    date: str
-    steps_done: int
-    titles: List[str]
-    note: str
-    created_at: str

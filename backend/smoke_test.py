@@ -1,6 +1,6 @@
 """轻步 LightStep 后端冒烟测试（离线，无需 key）。
 
-跑一遍完整流程 + 三个新功能（摩擦地图 / 跨天交接 / 私人手帐）。
+跑一遍现有任务流程、摩擦地图与跨天交接；确认服务端手帐已停用。
 """
 import sys
 import time
@@ -41,17 +41,12 @@ def main():
     show("完成一步(快)", client.post("/api/step/complete", json={"user_id": uid, "duration_ms": 4000}))
     show("温柔收尾", client.post("/api/task/exit", json={"user_id": uid, "gentle": True}))
 
-    # ===== 私人静默手帐 =====
-    print("\n===== 私人静默手帐 =====")
-    j = client.get("/api/journal", params={"user_id": uid}).json()
-    print("[手帐列表]", j)
-    assert isinstance(j, list) and len(j) >= 1, "手帐应有自动回执"
-    added = client.post("/api/journal/add", json={"user_id": uid, "note": "今天其实有点累"}).json()
-    print("[手帐新增]", added)
-    assert added["id"]
-    deleted = client.delete(f"/api/journal/{added['id']}", params={"user_id": uid}).json()
-    print("[手帐删除]", deleted)
-    assert deleted["deleted"] is True
+    # 手帐转为客户端本地存储，旧接口不再接收留言。
+    print("\n===== 服务端手帐已停用 =====")
+    retired = client.post("/api/journal/add", json={"user_id": uid, "note": "test-only"})
+    assert retired.status_code == 410
+    assert retired.json()["detail"]["code"] == "JOURNAL_CLIENT_ONLY"
+    assert client.get("/api/journal", params={"user_id": uid}).status_code == 410
 
     # ===== 摩擦地图 =====
     print("\n===== 摩擦地图 =====")

@@ -38,6 +38,11 @@ def _resolve_db_path(raw: str) -> str:
 
 @dataclass
 class Settings:
+    server_host: str = "127.0.0.1"
+    server_port: int = 8000
+    server_reload: bool = True
+    serve_debug_ui: bool = True
+    cors_origins: tuple[str, ...] = ("http://localhost:5173", "http://127.0.0.1:5173")
     # LLM 提供方：mock（离线）| openai（OpenAI 兼容 API）
     llm_provider: str = "mock"
     llm_base_url: str = "https://api.deepseek.com"
@@ -54,6 +59,13 @@ class Settings:
     @classmethod
     def from_env(cls) -> "Settings":
         return cls(
+            server_host=os.getenv("LIGHTSTEP_HOST", "127.0.0.1").strip(),
+            server_port=int(os.getenv("LIGHTSTEP_PORT", "8000")),
+            server_reload=os.getenv("LIGHTSTEP_RELOAD", "true").lower() in ("1", "true", "yes"),
+            serve_debug_ui=os.getenv("LIGHTSTEP_SERVE_DEBUG_UI", "true").lower() in ("1", "true", "yes"),
+            cors_origins=tuple(origin.strip() for origin in os.getenv(
+                "LIGHTSTEP_CORS_ORIGINS", "http://localhost:5173,http://127.0.0.1:5173"
+            ).split(",") if origin.strip()),
             llm_provider=os.getenv("LLM_PROVIDER", "mock").strip().lower(),
             llm_base_url=os.getenv("LLM_BASE_URL", "https://api.deepseek.com").strip(),
             llm_api_key=os.getenv("LLM_API_KEY", "").strip(),

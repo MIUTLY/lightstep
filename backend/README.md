@@ -8,7 +8,7 @@ AI 学习搭子「小步」—— 一只懒洋洋的黑猫，帮你把「动一�
 
 ## 当前进度（2026-11-07）
 
-本次同步保留队友原始业务源码，尚未修复已发现的流程问题；以下核心能力描述的是现有实现，并不代表全部通过验收或已与新版策划统一。
+本轮落实前后端分离与数据边界：任务与偏好由后端管理，回执及留言由客户端保存；便签返回状态已修复，其余已知缺陷见交接记录。以下未逐项完成产品验收。
 
 - [当前进度、缺陷与下一轮任务](../docs/handoff.md)
 - [需求边界与待定产品规则](../docs/requirements.md)
@@ -45,7 +45,7 @@ python smoke_test.py     # 跑一遍全流程冒烟测试（离线、无需 key�
 ### 3. 三层记忆
 - **任务级**（当天清空）：当前任务、当日记录
 - **偏好级**（长期）：摩擦地图、跨天交接
-- **情感级**（很轻）：便签、提醒、私人手帐
+- **便签与提醒**：沿用已有服务端实现；私人手帐与回执在客户端保存
 
 ### 4. 摩擦地图（个人化）
 按领域（写作 / 背单词 / 阅读 / 代码 / 运动 / 收拾）沉淀「哪里容易卡」。做某类任务常卡时，下次自动拆得更细，不点破、不记仇，只说一句「这类任务之前容易卡，我先拆得细一点」。
@@ -54,7 +54,7 @@ python smoke_test.py     # 跑一遍全流程冒烟测试（离线、无需 key�
 任务做了一半没关，第二天打开时不会硬清零，而是轻轻问一句：「上次你写到「X」。想接着就接着，不想就翻篇。」
 
 ### 6. 私人静默手帐
-完成任务 / 结束一天时，自动生成一份安静的「回执」，只自己看，随时可删，也可以手写补充。
+回执和私人留言由客户端本地生成与保存，不再在完成/退出任务时自动写入服务器。旧手帐接口返回410；旧数据库中已有表不自动删除。网页调试页提供主动保存的本地文本手帐，小程序图片手帐待前端接入。
 
 ### 7. 5 件小事
 换件小事、发呆、今天什么都不想干、走神记笔记、温柔收尾 —— 都只轻轻接住，不评判。
@@ -73,9 +73,9 @@ python smoke_test.py     # 跑一遍全流程冒烟测试（离线、无需 key�
 | POST | `/api/note` | 走神记笔记 |
 | POST | `/api/handoff/resume` | 接着上次做 |
 | POST | `/api/handoff/dismiss` | 翻篇 |
-| GET | `/api/journal` | 手帐列表 |
-| POST | `/api/journal/add` | 手帐新增 |
-| DELETE | `/api/journal/{id}` | 手帐删除 |
+| GET | `/api/journal` | 已停用，返回410 |
+| POST | `/api/journal/add` | 已停用，不接收留言，返回410 |
+| DELETE | `/api/journal/{id}` | 已停用，返回410 |
 | GET | `/api/session/state` | 当前状态 |
 | GET | `/api/history` | 历史 |
 | GET | `/api/daily/summary` | 今日小结 |
@@ -103,3 +103,10 @@ backend/
 ## 理论背书
 
 设计背后的心理学依据见 [`docs/理论背书.md`](../docs/理论背书.md)（实施意图、BJ Fogg 行为模型、行为激活、蔡格尼克效应、自我慈悲等）。
+
+## 分离部署与验证
+
+配置 LIGHTSTEP_HOST、LIGHTSTEP_PORT、LIGHTSTEP_CORS_ORIGINS；API 独立部署可关闭 LIGHTSTEP_SERVE_DEBUG_UI，部署时关闭 LIGHTSTEP_RELOAD。GET /api/health 提供存活检查。完整说明见 [部署说明](../docs/deployment.md)、[数据边界](../docs/architecture.md)和[接口约定](../docs/api.md)。
+
+后端边界回归：python -m unittest -v test_storage_boundary.py。
+本地手帐回归：node --test test_local_journal.cjs。
