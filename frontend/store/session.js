@@ -3,6 +3,7 @@ import { useUser } from './user.js'
 import * as api from '@/api/index.js'
 import { displayLabel, safeDuration } from '@/utils/format.js'
 import { stepKey } from '@/utils/stepIdentity.js'
+import { createStartReminderPoller } from '@/utils/startReminderPoller.js'
 
 /**
  * 会话 store：整个小程序的单一状态源。
@@ -24,6 +25,8 @@ import { stepKey } from '@/utils/stepIdentity.js'
 const LABEL_ACTIONS = {
 	现在开始: { type: 'choose_time', when: 'now' },
 	待会儿: { type: 'choose_time', when: 'later' },
+	'5分钟后': { type: 'choose_time', when: 'in_5_minutes' },
+	'10分钟后': { type: 'choose_time', when: 'in_10_minutes' },
 	今天不做: { type: 'choose_time', when: 'not_today' },
 	行: { type: 'commit', agree: true },
 	再想想: { type: 'commit', agree: false },
@@ -69,6 +72,7 @@ export const useSession = defineStore('session', {
 
 	actions: (state) => {
 		const user = useUser()
+		let operationVersion = 0
 
 		function uid() {
 			return user.current()
@@ -128,6 +132,7 @@ export const useSession = defineStore('session', {
 		/** 包一层错误处理：网络/后端错误只推一条系统小字，不打断对话 */
 		async function run(fn) {
 			if (state.busy) return null
+			operationVersion += 1
 			state.busy = true
 			state.lastError = ''
 			try {
@@ -141,8 +146,20 @@ export const useSession = defineStore('session', {
 			}
 		}
 
+		const reminderPoller = createStartReminderPoller(async (isCurrent) => {
+			if (state.busy || state.state !== 'ready' || !state.task || !state.task.start_due_at) return
+			const version = operationVersion
+			const reply = await api.pollStartReminder(uid())
+			// 用户开始/改约/退出时，旧轮询结果不能恢复旧任务或显示旧提醒。
+			if (!isCurrent() || version !== operationVersion || state.busy) return
+			const due = Array.isArray(reply.due_reminders) && reply.due_reminders.length > 0
+			applyReply(reply, { silent: !due })
+		})
+
 		return {
 			displayLabel,
+			startReminderChecks() { reminderPoller.start() },
+			stopReminderChecks() { reminderPoller.stop() },
 
 			/** 冷启动：打开会话（会拿到跨天交接提示 / 上次做到哪） */
 			async open(force = false) {
@@ -260,6 +277,7 @@ export const useSession = defineStore('session', {
 
 			/** 拉一次当前状态（冷启动兜底：用户直接杀进程后重进） */
 			async syncState() {
+				operationVersion += 1
 				try {
 					const data = await api.sessionState(uid())
 					state.state = data.state || 'idle'

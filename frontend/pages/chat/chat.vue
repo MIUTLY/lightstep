@@ -76,7 +76,7 @@
  * 页面本身不做任何「任务管理」，没有待办列表、没有今日目标、没有打卡。
  */
 import { computed, nextTick, ref, watch } from 'vue'
-import { onHide, onShow } from '@dcloudio/uni-app'
+import { onHide, onShow, onUnload } from '@dcloudio/uni-app'
 
 import CatBuddy from '@/components/CatBuddy.vue'
 import ChatBubble from '@/components/ChatBubble.vue'
@@ -103,6 +103,7 @@ const inputFocus = ref(false)
 const anchor = ref('')
 const todaySteps = ref(0)
 const started = ref(false)
+let pageVisible = false
 
 const themeClass = computed(() => (settings.sensory ? 'theme-sensory' : ''))
 
@@ -125,6 +126,7 @@ const {
 })
 
 onShow(async () => {
+	pageVisible = true
 	settings.load()
 	user.ensure()
 
@@ -136,14 +138,21 @@ onShow(async () => {
 		await session.syncState()
 	}
 
+	if (!pageVisible) return
+	session.startReminderChecks()
 	refreshToday()
 	scrollToBottom()
 	resumeRecall()
 })
 
-onHide(() => {
+function stopPageChecks() {
+	pageVisible = false
+	session.stopReminderChecks()
 	stopRecall()
-})
+}
+
+onHide(stopPageChecks)
+onUnload(stopPageChecks)
 
 /** 每次回到对话页都刷一下今日小结，用来决定小步的姿势 */
 async function refreshToday() {
@@ -426,3 +435,4 @@ watch(
 	opacity: 0.5;
 }
 </style>
+

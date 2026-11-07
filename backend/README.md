@@ -8,6 +8,8 @@ AI 学习搭子「小步」—— 一只懒洋洋的黑猫，帮你把「动一�
 
 ## 当前进度（2026-11-07）
 
+接手入口：[CODEX_HANDOFF.md](../CODEX_HANDOFF.md)。当前分支包含5/10分钟预约草稿，后端验证已过，新增前端轮询未完成行为/微信验收，不能据此标记全功能完成。
+
 本轮落实前后端分离与数据边界：任务与偏好由后端管理，回执及留言由客户端保存；便签返回状态已修复，其余已知缺陷见交接记录。以下未逐项完成产品验收。
 
 - [当前进度、缺陷与下一轮任务](../docs/handoff.md)
@@ -67,7 +69,8 @@ python smoke_test.py     # 跑一遍全流程冒烟测试（离线、无需 key�
 | --- | --- | --- |
 | POST | `/api/session/open` | 打开会话 / 每日问候 |
 | POST | `/api/chat` | 自由对话（意图识别入口） |
-| POST | `/api/task/choose_time` | 选择开始时间 `now/later/not_today` |
+| POST | `/api/task/choose_time` | `now/in_5_minutes/in_10_minutes/not_today`；旧later仅询问 |
+| POST | `/api/reminders/poll` | 预约草稿：取出一次到期提醒，不自动开始 |
 | POST | `/api/task/commit` | 5 分钟轻承诺 `agree=true/false` |
 | POST | `/api/step/complete` | 完成一小步（带 `duration_ms`） |
 | POST | `/api/step/resize` | 太重了/太简单 `smaller/bigger` |
@@ -120,4 +123,4 @@ backend/
 
 模型回归检查：python -m unittest -v test_llm.py test_storage_boundary.py。
 
-任务与粒度回归：python -m unittest -v test_ending_intent.py test_step_plan.py test_task_flow.py test_llm.py test_storage_boundary.py（44项）。仓库根目录运行 node --test frontend/tests/stepIdentity.test.mjs backend/test_local_journal.cjs（6项）。后者只检查纯逻辑，不代表小程序构建或真机联调完成。
+后端回归：python -m unittest -v test_start_reminders.py test_ending_intent.py test_step_plan.py test_task_flow.py test_llm.py test_storage_boundary.py（56项）。仓库根目录运行 node --test frontend/tests/stepIdentity.test.mjs backend/test_local_journal.cjs（6项，尚不含新增预约前端行为）。这些检查不代表小程序构建或真机联调完成。

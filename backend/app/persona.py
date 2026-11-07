@@ -38,7 +38,11 @@ def ask_when() -> str:
 
 
 def scheduled(label: str) -> str:
-    return f"行，{label}我记着。到时候轻轻叫你。"
+    return f"行，约在{label}。留在对话页时会轻轻提醒，离开后再回来也可以。"
+
+
+def ask_delay() -> str:
+    return "想约5分钟后，还是10分钟后？"
 
 
 def commit_prompt() -> str:

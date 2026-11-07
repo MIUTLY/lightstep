@@ -8,7 +8,7 @@
 import json
 import sqlite3
 from contextlib import contextmanager
-from datetime import datetime
+from datetime import datetime, timedelta, timezone
 
 from .config import settings
 from .decompose import domain_of
@@ -68,6 +68,13 @@ CREATE TABLE IF NOT EXISTS reminders (
     created_at TEXT
 );
 
+-- 当前任务的开始预约，独立于通用便签提醒；每人至多一项。
+CREATE TABLE IF NOT EXISTS task_start_reminders (
+    user_id    TEXT PRIMARY KEY,
+    due_at     TEXT NOT NULL,
+    notified   INTEGER NOT NULL DEFAULT 0
+);
+
 -- 摩擦地图：按领域沉淀"哪里容易卡"（长期，跨天保留）
 CREATE TABLE IF NOT EXISTS friction (
     user_id       TEXT,
@@ -101,6 +108,10 @@ def now_iso() -> str:
 
 def today_str() -> str:
     return datetime.now().strftime("%Y-%m-%d")
+
+
+def utc_now() -> datetime:
+    return datetime.now(timezone.utc)
 
 
 class DB:
@@ -202,6 +213,7 @@ class DB:
                 "VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)",
                 (user_id, title, levels_json, level, current_idx, steps_done, state, today_str(), now_iso()),
             )
+            c.execute("DELETE FROM task_start_reminders WHERE user_id=?", (user_id,))
 
     def get_active_task(self, user_id: str) -> dict | None:
         with self._conn() as c:
@@ -213,10 +225,46 @@ class DB:
         vals = list(fields.values()) + [now_iso(), user_id]
         with self._conn() as c:
             c.execute(f"UPDATE active_task SET {', '.join(cols)}, updated_at=? WHERE user_id=?", vals)
+            if "state" in fields and fields["state"] != "ready":
+                c.execute("DELETE FROM task_start_reminders WHERE user_id=?", (user_id,))
 
     def clear_active_task(self, user_id: str) -> None:
         with self._conn() as c:
             c.execute("DELETE FROM active_task WHERE user_id=?", (user_id,))
+            c.execute("DELETE FROM task_start_reminders WHERE user_id=?", (user_id,))
+
+    def schedule_task_start(self, user_id: str, minutes: int) -> bool:
+        if minutes not in (5, 10):
+            raise ValueError("start delay must be 5 or 10 minutes")
+        with self._conn() as c:
+            c.execute("BEGIN IMMEDIATE")
+            task = c.execute("SELECT state FROM active_task WHERE user_id=?", (user_id,)).fetchone()
+            if not task or task["state"] != "ready":
+                return False
+            due = (utc_now() + timedelta(minutes=minutes)).isoformat(timespec="seconds")
+            c.execute(
+                "INSERT INTO task_start_reminders (user_id, due_at, notified) VALUES (?, ?, 0) "
+                "ON CONFLICT(user_id) DO UPDATE SET due_at=excluded.due_at, notified=0", (user_id, due))
+        return True
+
+    def get_start_due_at(self, user_id: str) -> str | None:
+        with self._conn() as c:
+            row = c.execute("SELECT due_at FROM task_start_reminders WHERE user_id=?", (user_id,)).fetchone()
+        return row["due_at"] if row else None
+
+    def take_due_start_reminder(self, user_id: str) -> list[str]:
+        # 取出并标记在同一事务，避免并行打开/轮询重复返回同一预约。
+        with self._conn() as c:
+            c.execute("BEGIN IMMEDIATE")
+            row = c.execute(
+                "SELECT t.title FROM task_start_reminders r JOIN active_task t ON t.user_id=r.user_id "
+                "WHERE r.user_id=? AND r.notified=0 AND r.due_at<=? AND t.state='ready'",
+                (user_id, utc_now().isoformat(timespec="seconds")),
+            ).fetchone()
+            if not row:
+                return []
+            c.execute("UPDATE task_start_reminders SET notified=1 WHERE user_id=?", (user_id,))
+        return [f"之前约好开始「{row['title']}」。想开始时点「现在开始」，不急。"]
 
     # ---------- 当日记录 ----------
 
@@ -272,7 +320,8 @@ class DB:
     def due_reminders(self, user_id: str) -> list[str]:
         with self._conn() as c:
             rows = c.execute(
-                "SELECT label FROM reminders WHERE user_id=? AND done=0 AND due_at<=? ORDER BY due_at",
+                "SELECT label FROM reminders WHERE user_id=? AND done=0 AND due_at<=? "
+                "AND label NOT LIKE '该开始「%」啦' ORDER BY due_at",
                 (user_id, now_iso()),
             ).fetchall()
         return [r["label"] for r in rows]

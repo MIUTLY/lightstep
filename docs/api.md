@@ -1,6 +1,6 @@
 # 前端接入约定
 
-接口基线：本轮 feat/frontend-backend-boundary。完整请求字段与响应结构以运行中的 /docs 为准。
+完整请求字段与响应结构以运行中的 /docs 为准。本分支含fix/start-reminder-options预约草稿，尚未完成前端行为/微信验收；已合并与待合并状态见根目录CODEX_HANDOFF.md。
 
 ## 地址与身份
 
@@ -17,6 +17,8 @@
 | 打开 | POST /api/session/open | user_id |
 | 输入目标或反馈 | POST /api/chat | user_id、message |
 | 现在开始 | POST /api/task/choose_time | user_id、when=now |
+| 预约开始 | POST /api/task/choose_time | when=in_5_minutes或in_10_minutes |
+| 检查预约 | POST /api/reminders/poll | user_id；有取出并标记的副作用，不自动重试送达 |
 | 确认轻承诺 | POST /api/task/commit | user_id、agree=true |
 | 完成当前步骤 | POST /api/step/complete | user_id、duration_ms |
 | 主动拆小 | POST /api/step/resize | user_id、direction=smaller |
@@ -25,13 +27,15 @@
 | 恢复展示 | GET /api/session/state | 查询参数 user_id |
 | 存活检查 | GET /api/health | 不代表真实模型供应商已连通 |
 
-Reply 返回 reply、state、task、buttons 等字段。task 包括 title、current_step、steps_done、granularity、state、step_id。step_id 是当前展示动作的稳定标识：同一步刷新不变，相同文字的不同动作仍有不同标识。计时优先比较 step_id，兼容旧后端时才回退到标题和步骤文字；它不是请求幂等键。客户端成功后用响应替换当前展示；失败时保持原步骤，避免重复完成请求。当前还没有幂等令牌，不要自动重试写操作或允许连点完成。
+Reply 返回 reply、state、task、buttons 等字段。task 包括 title、current_step、steps_done、granularity、state、step_id，以及预约草稿新增的start_due_at（UTC ISO或null）。step_id 是当前展示动作的稳定标识：同一步刷新不变，相同文字的不同动作仍有不同标识。计时优先比较 step_id，兼容旧后端时才回退到标题和步骤文字；它不是请求幂等键。客户端成功后用响应替换当前展示；失败时保持原步骤，避免重复完成请求。当前还没有幂等令牌，不要自动重试写操作或允许连点完成。
 
 只有服务端决定任务进度；客户端不要用本地数组下标自行推进。steps_done 供内部渲染或猫姿态使用，不等于允许在产品界面展示统计。
 
 ## 尚未补齐的接口能力
 
-when=later 仍是旧的半小时预约，不代表5/10分钟已经实现。轻承诺到期/续时、完整步骤查看/重排尚未落地。状态与参数校验、粒度跳步已有修复分支，合并状态见 handoff.md。
+本分支预约草稿支持5/10分钟；旧when=later只询问时长，不创建半小时预约。重选替换旧预约，开始/退出/换任务取消预约；到点仅返回due_reminders，不自动开始。每项预约取出标记一次，不保证网络丢失后的可靠送达。start_due_at消费后仍可能保留、前端会继续无效检查，待接手者修正。
+
+uni-app对话页可见时每15秒检查，隐藏/卸载停止；网页调试页目前仅重新打开时检查。前端行为测试、勿扰策略和微信验收尚未完成。轻承诺到期/续时、完整步骤查看/重排仍待落实。状态与参数校验、粒度跳步等合并状态见handoff.md。
 
 ## 粒度调整与完成
 
@@ -62,7 +66,7 @@ backend/static/ 调试页已改为本地文本手帐示例；它只展示存储�
 
 | 动作 | 允许的状态 | 参数 |
 | --- | --- | --- |
-| 选择开始时间 | ready | when只能为now/later/not_today |
+| 选择开始时间 | ready | now/in_5_minutes/in_10_minutes/later/not_today |
 | 接受/拒绝轻承诺 | committing | agree必须为JSON布尔值 |
 | 完成步骤 | executing | duration_ms必须为非负整数，不接受字符串、布尔值或小数 |
 | 调整粒度 | ready/committing/executing | direction只能为smaller/bigger；调整不隐式开始任务 |
