@@ -1,0 +1,17 @@
+/* uni-app 全局 SCSS 变量（每个组件的 <style lang="scss"> 会自动注入）
+   注意：这里只放编译期变量，运行期换肤（感官友好模式）用的是 App.vue 里的 CSS 变量。 */
+
+$bg: #f5f0e8;
+$surface: #ffffff;
+$surface-soft: #fbf8f2;
+$ink: #2c2824;
+$ink-soft: #5a544c;
+$muted: #958c80;
+$line: #e8e0d2;
+$cat: #211c16;
+$accent: #d9872b;
+$accent-deep: #b96f1b;
+$accent-soft: #f6e7ce;
+$ok: #6e8a63;
+$danger: #b05444;
+$radius: 16px;

@@ -1,0 +1,27 @@
+# ---- uni-app / HBuilderX ----
+# 编译产物（HBuilderX 每次运行都会重建，不该进仓库）
+unpackage/
+# HBuilderX 本地工程配置
+.hbuilderx/
+project.private.config.json
+
+# ---- 依赖 ----
+node_modules/
+package-lock.json
+pnpm-lock.yaml
+yarn.lock
+
+# ---- 日志与临时文件 ----
+*.log
+npm-debug.log*
+.DS_Store
+Thumbs.db
+
+# ---- 编辑器 ----
+.vscode/
+.idea/
+*.swp
+
+# ---- 本地环境私有配置（如果你以后加了 .env 之类）----
+.env
+.env.local

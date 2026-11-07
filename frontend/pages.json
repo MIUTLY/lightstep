@@ -1,0 +1,57 @@
+{
+	"easycom": {
+		"autoscan": true,
+		"custom": {}
+	},
+	"pages": [
+		{
+			"path": "pages/chat/chat",
+			"style": {
+				"navigationStyle": "custom",
+				"navigationBarTitleText": "轻步",
+				"disableScroll": true
+			}
+		},
+		{
+			"path": "pages/focus/focus",
+			"style": {
+				"navigationStyle": "custom",
+				"disableScroll": true,
+				"navigationBarTitleText": "这一步"
+			}
+		},
+		{
+			"path": "pages/receipt/receipt",
+			"style": {
+				"navigationStyle": "custom",
+				"navigationBarTitleText": "今日回执"
+			}
+		},
+		{
+			"path": "pages/journal/journal",
+			"style": {
+				"navigationBarTitleText": "手帐"
+			}
+		},
+		{
+			"path": "pages/history/history",
+			"style": {
+				"navigationBarTitleText": "之前做过什么"
+			}
+		},
+		{
+			"path": "pages/settings/settings",
+			"style": {
+				"navigationBarTitleText": "设置"
+			}
+		}
+	],
+	"globalStyle": {
+		"navigationBarTextStyle": "black",
+		"navigationBarTitleText": "轻步 LightStep",
+		"navigationBarBackgroundColor": "#F5F0E8",
+		"backgroundColor": "#F5F0E8",
+		"backgroundColorTop": "#F5F0E8",
+		"backgroundColorBottom": "#F5F0E8"
+	}
+}
