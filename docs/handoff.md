@@ -1,3 +1,21 @@
+# 本轮合并交接：任务森林与真实AI生成进入main
+
+日期：2026-11-07（北京时间）。用户在查看各PR状态及未验收项后明确指示“该合并的你都合并吧”，本轮据此执行#11 → #12的后端合并，不再要求额外重复确认；未新增队友review记录，也不将用户合并授权写成测试或产品验收通过。
+
+- [PR #11](https://github.com/MIUTLY/lightstep/pull/11)已合并到main，合并提交`172432ab871ef5017587fa8a6dccbe89d57068eb`。原实施`c405a78d2b4c7b3a8b1fbc15ba58aacef836fd41`，原头`039b26fcf14e59a58dff2f15ff04d1c929a7f7dd`。
+- [PR #12](https://github.com/MIUTLY/lightstep/pull/12)已从feat/task-forest改为指向main，本记录随该PR进入主线。业务实施`bbe6f60b4b9e0a44f5816e5b643b0a3d35e7de62`，本轮合并前已测试快照`07e00747c5ee3071afc39a2c67265dae6294ce15`；最终合并提交编号与状态以PR页面的merge事件为准。
+- [PR #10](https://github.com/MIUTLY/lightstep/pull/10)保留草稿，未合并；五项微信平台验收仍未执行。本轮不带入轻承诺前端改动。
+
+本轮未修改业务实现。仅合并已授权的后端工作，并更新`docs/handoff.md`、`CODEX_HANDOFF.md`和`docs/ai-task-generation.md`，消除“#11尚未合并/以feat/task-forest为目标”的过期现状说明。PR描述同步实际依赖状态。
+
+合并前核对99个本地源码/文档文本blob与#12远端已测试快照完全一致；复用该快照的105项后端回归（37.315s，OK）、隔离冒烟及无密钥真实进程启动结果，没有把未配置环境当成真实AI成功。测试命令和场景详见下节。GitHub无自动CI和队友review记录，不将空检查列表称为CI通过。文档更新运行git diff --check；合并后核对主线树及PR状态，不对无业务变化的同一快照重复执行测试。
+
+仍未验证：真实供应商“洗衣服/洗碗/整理桌面”的任务内容与语义复核效果、实际网络时延及微信端提示/草稿恢复。运行环境需在backend/.env配置真实AI并重启后端；git pull不会替用户部署或刷新正在运行的服务。旧任务兼容、既有跨天政策和step_id限制不在本轮重新定义。#10微信验收、预约可靠送达、回执/手帐本地保存继续独立推进。
+
+---
+
+## 以下为本轮合并前的实施与验证记录
+
 # 最新交接：真实AI任务森林生成与失败保留
 
 日期：2026-11-07（北京时间）。独立分支`fix/real-ai-task-generation`，基于尚未合并的PR [#11](https://github.com/MIUTLY/lightstep/pull/11) `feat/task-forest`头`039b26fcf14e59a58dff2f15ff04d1c929a7f7dd`。本PR先以feat/task-forest为base；#11合并后核对并改为main，不能绕过#11重复提交森林实现。不合并PR #10、不修改前端、网页静态文件、轻承诺计时、回执或手帐。

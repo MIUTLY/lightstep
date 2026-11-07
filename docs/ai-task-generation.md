@@ -1,6 +1,6 @@
 # 真实AI任务生成与可重试失败
 
-2026-11-07，基于尚未合并的PR #11（039b26f），独立分支fix/real-ai-task-generation。沿用既有forest_v1，不重做父子切换，也不带入PR #10、前端、轻承诺、回执或手帐改动。
+2026-11-07，源于PR #11（039b26f）的独立分支fix/real-ai-task-generation。#11现已合并main（172432ab），#12已改目标为main并按用户本轮授权整合，最终合并记录见[handoff.md](handoff.md)。沿用既有forest_v1，不重做父子切换，也不带入PR #10、前端、轻承诺、回执或手帐改动。
 
 ## 运行与提交边界
 
