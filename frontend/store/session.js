@@ -45,6 +45,12 @@ export const useSession = defineStore('session', {
 	state: () => ({
 		/** [{ id, role: 'cat'|'user'|'system', reply?, text? }] */
 		messages: [],
+		/**
+		 * 用户有没有说过话。
+		 * 对话页靠它判断是否展示「居中小猫 + 我们要开始做什么呢？」的初始态：
+		 * 一旦说过话（哪怕之后被温柔收尾清空了界面）就不再回到初始态。
+		 */
+		hasTalked: false,
 		/** 后端返回的会话状态机 */
 		state: 'idle',
 		/** 当前任务快照（TaskView，可能为 null） */
@@ -79,6 +85,7 @@ export const useSession = defineStore('session', {
 		}
 
 		function pushUser(text) {
+			state.hasTalked = true
 			state.messages.push({ id: nextId(), role: 'user', text })
 		}
 

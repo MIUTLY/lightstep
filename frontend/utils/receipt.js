@@ -23,8 +23,7 @@ const COLORS = {
 	muted: '#958c80',
 	line: '#e8e0d2',
 	cat: '#211c16',
-	amber: '#d9872b',
-	cushion: '#f6e7ce'
+	amber: '#d9872b'
 }
 
 const SENSORY_COLORS = {
@@ -35,8 +34,7 @@ const SENSORY_COLORS = {
 	muted: '#8a8a8a',
 	line: '#dcdcdc',
 	cat: '#111111',
-	amber: '#555555',
-	cushion: '#efefef'
+	amber: '#555555'
 }
 
 const K = 0.5522847498
@@ -84,43 +82,36 @@ function dashedLine(ctx, x1, x2, y, color) {
 	}
 }
 
-/** 画小步：垫子 + 身体 + 耳朵 + 眼睛；pose 决定形状（和 CSS 版对应） */
-function drawCat(ctx, cx, cy, pose, c) {
-	const bodyW = pose === 'stretch' ? 116 : 104
-	const bodyH = pose === 'sleep' ? 58 : pose === 'sit' ? 92 : 78
+/** 小步美术资源的宽高比（static/xiaobu.png = 400×238） */
+const CAT_RATIO = 238 / 400
 
-	// 身下的「像沙发又像云」的东西
-	ctx.setFillStyle(c.cushion)
-	ellipsePath(ctx, cx, cy + bodyH * 0.78, bodyW * 1.14, 20)
-	ctx.fill()
+/**
+ * 画小步。
+ *
+ * 现在用真实美术资源（static/xiaobu.png），屏幕上的 <CatBuddy> 和票根上这张图是同一张，
+ * 所以回执里的猫和界面里长得完全一样。
+ *
+ * 为什么要把路径传进来：旧版 canvas 的 drawImage 在部分环境里不认包内路径，
+ * 需要先用 uni.getImageInfo 拿到真实路径（由页面负责解析），这里只负责画。
+ *
+ * @param {string} [imagePath] 解析后的图片路径；为空时退化成一个圆润剪影，不至于缺一块
+ */
+function drawCat(ctx, cx, cy, pose, c, imagePath) {
+	const w = 230
+	const h = w * CAT_RATIO
 
-	// 身体
+	if (imagePath) {
+		try {
+			ctx.drawImage(imagePath, cx - w / 2, cy - h / 2, w, h)
+			return
+		} catch (e) {
+			/* 落到下面的剪影兜底 */
+		}
+	}
+
 	ctx.setFillStyle(c.cat)
-	ellipsePath(ctx, cx, cy, bodyW, bodyH)
+	ellipsePath(ctx, cx, cy, w * 0.45, h * 0.36)
 	ctx.fill()
-
-	// 耳朵：两个小三角
-	const earBase = cy - bodyH * 0.72
-	const earR = 24
-	const earXs = [cx - 52, cx + 52]
-	ctx.setFillStyle(c.cat)
-	earXs.forEach((ex) => {
-		ctx.beginPath()
-		ctx.moveTo(ex - earR, earBase + 30)
-		ctx.lineTo(ex, earBase - 16)
-		ctx.lineTo(ex + earR, earBase + 30)
-		ctx.closePath()
-		ctx.fill()
-	})
-
-	// 眼睛：半睁的琥珀色
-	const eyeRy = pose === 'sleep' ? 2.5 : pose === 'awake' ? 7 : pose === 'sit' ? 9 : 10
-	const eyeXs = [cx - 33, cx + 33]
-	ctx.setFillStyle(c.amber)
-	eyeXs.forEach((ex) => {
-		ellipsePath(ctx, ex, cy - 4, 11, eyeRy)
-		ctx.fill()
-	})
 }
 
 /**
@@ -131,6 +122,7 @@ function drawCat(ctx, cx, cy, pose, c) {
  * @param {string} [options.line]     用户写的那句话
  * @param {string} [options.date]     右下角日期，例如 2026.11.07
  * @param {boolean} [options.sensory] 感官友好模式（纯黑白）
+ * @param {string} [options.catImagePath] 小步图片的真实路径（由页面用 uni.getImageInfo 解析）
  * @param {Function} [done]           ctx.draw 完成后的回调
  */
 export function drawReceipt(ctx, options, done) {
@@ -171,7 +163,7 @@ export function drawReceipt(ctx, options, done) {
 	ctx.fillText('轻 步 · 今 日 回 执', centerX, 108)
 
 	// 小步
-	drawCat(ctx, centerX, 296, pose, c)
+	drawCat(ctx, centerX, 296, pose, c, opts.catImagePath)
 
 	// 大字
 	ctx.setFillStyle(c.ink)
