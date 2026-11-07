@@ -21,3 +21,11 @@ htmlcov/
 .DS_Store
 Thumbs.db
 *.log
+
+# Frontend dependencies and generated output
+node_modules/
+dist/
+unpackage/
+.vite/
+coverage/
+project.private.config.json

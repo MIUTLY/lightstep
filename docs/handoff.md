@@ -56,3 +56,11 @@
 - 私有仓库：https://github.com/MIUTLY/lightstep-backend
 - 首次源码与文档同步提交：`chore: sync original backend and team handoff`。
 - 此提交本身即首次同步版本；后续实施请记录具体提交编号。
+
+## 完整项目目录调整
+- 按用户要求，将现有后端整体迁入 backend/，业务源码和静态托管关系保持原样。
+- frontend/ 预留给小程序前端成员，目前仅有接入说明，未收到业务源码。
+- docs/ 放全团队需求与交接记录，根 README 和 AGENTS.md 说明模块及协作方式。
+- 在 backend/ 内安装依赖、启动及测试；后续业务工作开分支并提交 PR。
+- 本轮仅整理目录和文档，已知业务缺陷尚未修复；未增加任何前端业务实现。
+- 提交说明：chore: organize full LightStep project workspace。
