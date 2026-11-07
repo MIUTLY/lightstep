@@ -1,3 +1,43 @@
+# 最新交接：五分钟轻承诺按后台继续累计实现
+
+日期：2026-11-07（北京时间）。任务：按用户优先级推进第2项，先确认后台规则，再实现/测试并提交新PR，不直接合并。用户明确选择“后台继续累计；若已到期，回前台再温和询问”。
+
+基线main：7f75a7dc7c4c310050f10f23cf6378f2f20f5ebc，包含已合并PR #8及队友前端更新。独立分支：feat/five-minute-anchor。实施提交：[0b61895fb9be7c001b84a2300e30616d668bf221](https://github.com/MIUTLY/lightstep/commit/0b61895fb9be7c001b84a2300e30616d668bf221)；交接补充提交与PR入口见该分支提交记录。
+
+## 改了什么、依据与原因
+
+- `frontend/composables/useFiveMinuteAnchor.js`：改为由会话持有的截止时间计时。后台保留deadline，停掉timeout与显示；前台核对真实时间，迟到的timeout也不延长这一轮；用户选择继续才重新计五分钟。
+- `frontend/store/session.js`：只有同意开始成功进入executing才启动；换步、拆小、便签和同一进程内同步不重置。结束/任务完成/换任务/同步失去执行态或身份变化时清理；结束失败仍保留到期选择。续时不调用步骤API，busy时不续时。确认中的旧身份响应不能启动另一身份的承诺。
+- `frontend/App.vue`：应用onShow/onHide分别通知会话。应用后台与页面切换分开，页面生命周期不再决定轻承诺截止时间。
+- `frontend/components/FiveMinuteChoice.vue`、`pages/focus/focus.vue`、`pages/chat/chat.vue`：共用轻提示及两个动作；移除执行页每次换步/隐藏/重新显示重算五分钟的逻辑。收起页面保留承诺，无倒计时、弹窗或强制导航。focus等待状态恢复时增加生命周期版本，防止隐藏后又启动页面副作用。
+- 新增`frontend/tests/fiveMinuteAnchor.test.mjs`、`fiveMinuteSession.test.mjs`、`fiveMinuteLifecycle.test.mjs`、`helpers/anchorRuntime.mjs`共22项回归；扩展VM平台边界；既有预约测试补ref与TabBar/新提示组件的边界替身，不删除原有断言。
+- 更新requirements、architecture、api、frontend README、CODEX_HANDOFF及[详细报告](change-reports/2026-11-07-five-minute-anchor.md)。后端API/数据库、队友的回执与手帐实现未改。
+
+## 验证命令与结果
+
+根目录：
+
+```bash
+node --experimental-vm-modules --test --test-isolation=none frontend/tests/*.test.mjs backend/test_local_journal.cjs
+git diff --check
+```
+
+- 50项Node测试通过：既有28项 + 新增22项。可控时钟覆盖后台到期/未到期、延迟回调、续时、结束失败/忙碌、换步/拆小/便签、页面重建、App生命周期、身份边界及三套计时的独立性。
+- 独立临时SQLite、mock下原smoke_test.py通过。使用仓库外既有TestClient loop_factory/sitecustomize适配当前环境selector；没有修改测试断言或业务路由。
+- 改动JS及App/focus/chat/选择组件script语法、diff空白检查通过。未重跑58项后端回归，其通过记录来自PR #8，本轮后端源码逐字节保持不变。
+- VM测试使用实际模块/页面script和模拟Vue/uni边界，不是Vue模板/WXSS或微信构建。尚未执行HBuilderX/微信开发者工具、真机、真实五分钟等待或生产部署，不宣称目标平台已验收。
+
+## 尚未完成与边界
+
+- 当前轻承诺截止时间在客户端进程内；系统杀进程/重启恢复未实现，不因恢复到executing就伪造一次新的轻承诺。设置/回执等非任务页不被自动导航，到期状态在回执行/对话页后显示。
+- 无操作召回的既有勿扰逻辑保持独立，其他提示与勿扰、同时到期的显示优先级仍待统一。没有系统后台推送。
+- PR #8已合并；消费后不停表已修复，但漏提醒的展示确认/重投仍未实现，不以本轮轻承诺工作冒充预约可靠送达。
+- 下一项按用户顺序核对回执/手帐的本地图片、私人留言、重开查看、删除与保存失败。队友已提交相关代码，本轮未代替下一项验收。
+
+下方为历史记录，以本节的最新规则和本轮验证为准。
+
+---
+
 # PR #8 合并授权更新
 
 2026-11-07（北京时间）：用户在知悉未完成项后明确要求合并 [PR #8](https://github.com/MIUTLY/lightstep/pull/8)，本次按此指令转为正式 PR 并合入 main；下文上一轮“保持草稿、不合并”为当时范围，已由此指令更新。没有补做或虚构队员评审、CI、微信编译和真机验收。

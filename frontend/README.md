@@ -45,4 +45,11 @@ backend/static/ 的浏览器文本手帐是可运行的本地保存示例，不�
 node --experimental-vm-modules --test --test-isolation=none frontend/tests/*.test.mjs backend/test_local_journal.cjs
 ```
 
-当前共28项（预约新增22项、既有6项）。测试加载实际poller、session、API封装及chat.vue的script，替换Vue/uni平台边界并使用可控计时器、慢请求；覆盖隐藏/卸载、重复onShow、请求不重叠、消费后停表、改约重启、旧响应及错误提示。不执行Vue模板、样式或微信运行时，不能代替HBuilderX编译和真机验收。VM Modules会产生Node实验功能提示。
+预约轮次共28项（预约新增22项、既有6项）。测试加载实际poller、session、API封装及chat.vue的script，替换Vue/uni平台边界并使用可控计时器、慢请求；覆盖隐藏/卸载、重复onShow、请求不重叠、消费后停表、改约重启、旧响应及错误提示。不执行Vue模板、样式或微信运行时，不能代替HBuilderX编译和真机验收。VM Modules会产生Node实验功能提示。
+
+
+## 五分钟轻承诺（2026-11-07）
+
+用户确认后台继续累计；到期回前台再温和询问。App生命周期通知会话，截止时间不随换步、收起或页面重建而改变；执行页和对话页共用选择组件。继续只续五分钟，结束复用后端退出，失败不假报成功。
+
+沿用上面的Node命令，当前总计50项通过（本轮新增22项）。测试覆盖后台超时/未超时、延迟回调、换步/拆小/便签、收起/卸载、继续/退出失败、身份及三套计时的独立性。仅进程内保留截止时间，杀进程重启后的轻承诺恢复未实现；当前也没有微信编译和真机验收记录。
