@@ -11,7 +11,7 @@
 - 变更文件：backend/.env.example、app/config.py、app/llm.py、requirements.txt、check_llm.py、test_llm.py、README.md、backend/README.md、docs/ai-integration.md、deployment.md、handoff.md。
 - 回归：13项Python测试、3项Node测试、独立临时数据库的离线smoke_test.py通过。
 - 仍未完成：B01、B03、B04/B05、B07、对话质量调优、小程序真机及生产部署；此前浏览器视觉验收受阻状态未改变。
-- 本轮提交：见本分支PR提交记录；前一轮提交与详细历史如下。
+- 本轮实施提交：[a806399](https://github.com/MIUTLY/lightstep/commit/a8063993f5ea2b2facffe517f99aa7995defbea4)；[PR #2](https://github.com/MIUTLY/lightstep/pull/2)。前一轮提交与详细历史如下。
 
 ---
 
