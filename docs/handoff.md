@@ -1,3 +1,39 @@
+# 最新追加：AI拆分帮助行动，不验收用户成果
+
+2026-11-07，继续尚未合并PR #17（fix/public-ai-text），基于其a88267d；不另开重复PR。实施[e9f6fd5a52042bc2ab986a99ef36dc9efdbf8db2](https://github.com/MIUTLY/lightstep/commit/e9f6fd5a52042bc2ab986a99ef36dc9efdbf8db2)。
+
+用户补充的核心不是删一个“理由”词，而是降低行动门槛：解决难题可以查知识点、试写思路，用户点做完了即记录进度，不评估答案对错、完成质量或达标程度。截图里的获取确认、记录选项理由、完整性检查、最终答案交付，是AI强加的额外负担。
+
+核对发现resolve_scope原文要求“可验证的全部完成范围”，独立审核也容易把覆盖理解为成果可验收。因此prompts.py增加共享ACTION_SUPPORT_POLICY，同时用于真实AI拆分、独立计划审核；llm.py将其用于范围澄清和范围审核，明确仅问影响拆分的对象/工作量，不索要题目全文、答案或选项验题，不替用户解题。审核检查AI计划是否忠实、省力，有额外留证/理由记录/自评/质量验收负担时用既有relevant=false拒绝，不用模板或关键词替换。
+
+完成接口原本就仅根据用户完成操作更新当前范围叶子，不调用AI评分、不要求提交答案，因此保留此流程。若写论证、检查代码或交付报告本来就是用户明确目标/必要工作，仍保留，不能机械删除这些动作。完整性只指不漏约定的行动范围，不保证客观成果达标。
+
+保留上轮统一展示过滤：删除内部标签，必要动作和父任务上下文、剩余范围不丢。没有盲删所有括号，也没有在输出阶段删掉“记录/理由/检查”来暗改已有森林。旧任务不自动重拆或清进度；新规则用于新生成。前端继续只展示当前一步，截图中的完整森林列表及排版由前端成员接入，本轮未代改。
+
+修改：backend/app/prompts.py、llm.py；新增backend/test_action_support.py四项；更新AGENTS、根/后端README、api、requirements，新增[行动辅助协议](action-support.md)。本次是在同一PR补齐真实AI生成语义，而不是只做文本掩盖。
+
+测试：
+```bash
+# backend目录
+python -m unittest discover -s . -p 'test_*.py'
+python -m unittest -v test_action_support
+python smoke_test.py
+```
+云环境实际在根目录沿用仓库外selector辅助：
+```bash
+PYTHONDONTWRITEBYTECODE=1 PYTHONPATH=/workspace/work/pr8-runtime:/workspace/work:backend timeout 90s python -m unittest discover -s backend -p 'test_*.py'
+PYTHONDONTWRITEBYTECODE=1 PYTHONPATH=/workspace/work/pr8-runtime:/workspace/work:backend timeout 30s python -m unittest -v test_action_support
+PYTHONDONTWRITEBYTECODE=1 PYTHONPATH=/workspace/work/pr8-runtime:/workspace/work:backend timeout 30s python backend/smoke_test.py
+git diff --check
+```
+最终164项通过（46.489s，原160+新增4）；4项专项0.214s通过；隔离冒烟、AST及diff检查通过。验证生成/审核/澄清实际收到共享行动政策，隔离审核可拒绝额外理由汇报，用户手动完成无需答案或AI评分。其余展示过滤、问答、森林进度、退出恢复、幂等和存储边界继续通过。
+
+未验证：真实模型对数学难题、选择题、写作、家务等能否持续生成理想的短动作，及微信展示未实测。替身审核拒绝不等于真实模型一定能发现所有多余步骤。用户希望精简的旧任务需主动重新生成后才能得到新规则计划，不自动抹掉旧进度。本轮不自动合并或部署。
+
+---
+
+以下为此前交接。
+
 # 最新交接：统一过滤对外AI展示文案
 
 2026-11-07，独立分支fix/public-ai-text，基于最新main 412ebdc（#16已合并）。实施[3b1ba659887427d32bde796620f6cbc6aeefd917](https://github.com/MIUTLY/lightstep/commit/3b1ba659887427d32bde796620f6cbc6aeefd917)。本轮未合并或部署。
