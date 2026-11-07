@@ -51,6 +51,7 @@ class Settings:
     llm_temperature: float = 0.7
     llm_timeout: float = 30.0
     llm_max_tokens: int = 1024
+    llm_decompose_max_tokens: int = 4096
     # 留空时不发送供应商扩展参数；DeepSeek 可配置 disabled / enabled。
     llm_thinking: str = ""
     # 数据
@@ -62,6 +63,8 @@ class Settings:
     def __post_init__(self):
         if self.llm_thinking not in ("", "enabled", "disabled"):
             raise ValueError("LLM_THINKING must be empty, enabled or disabled")
+        if self.llm_decompose_max_tokens <= 0:
+            raise ValueError("LLM_DECOMPOSE_MAX_TOKENS must be positive")
         if self.llm_max_tokens <= 0:
             raise ValueError("LLM_MAX_TOKENS must be positive")
 
@@ -82,6 +85,7 @@ class Settings:
             llm_temperature=float(os.getenv("LLM_TEMPERATURE", "0.7")),
             llm_timeout=float(os.getenv("LLM_TIMEOUT", "30")),
             llm_max_tokens=int(os.getenv("LLM_MAX_TOKENS", "1024")),
+            llm_decompose_max_tokens=int(os.getenv("LLM_DECOMPOSE_MAX_TOKENS", "4096")),
             llm_thinking=os.getenv("LLM_THINKING", "").strip().lower(),
             db_path=_resolve_db_path(os.getenv("LIGHTSTEP_DB", "lightstep.db")),
             fast_threshold=float(os.getenv("FAST_THRESHOLD", "15")),

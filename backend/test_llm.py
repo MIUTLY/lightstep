@@ -24,7 +24,7 @@ import check_llm
 class LLMTests(unittest.TestCase):
     def setUp(self):
         self.settings = Settings(llm_provider="openai", llm_api_key="test-key-not-real",
-                                 llm_thinking="disabled", llm_max_tokens=512)
+                                 llm_thinking="disabled", llm_max_tokens=512, llm_decompose_max_tokens=768)
         self.llm = OpenAICompatLLM(self.settings)
 
     def response(self, content, finish_reason="stop"):
@@ -32,14 +32,14 @@ class LLMTests(unittest.TestCase):
             json={"choices": [{"message": {"content": content}, "finish_reason": finish_reason}]})
 
     def test_json_request_has_budget_and_optional_vendor_controls(self):
-        response = self.response('{"fine":["开文档"],"normal":["写一句"],"coarse":["写一段"]}')
+        response = self.response(json.dumps({"trees": [{"text": "写一段", "children": [{"text": "写一句", "children": [{"text": "开文档"}]}]}]}))
         with patch("httpx.post", return_value=response) as post:
             result = self.llm.decompose("写论文")
-        self.assertEqual(result["normal"], ["写一句"])
+        self.assertEqual(result["trees"][0]["children"][0]["text"], "写一句")
         kwargs = post.call_args.kwargs
         self.assertEqual(kwargs["json"]["response_format"], {"type": "json_object"})
         self.assertEqual(kwargs["json"]["thinking"], {"type": "disabled"})
-        self.assertEqual(kwargs["json"]["max_tokens"], 512)
+        self.assertEqual(kwargs["json"]["max_tokens"], 768)
         self.assertEqual(kwargs["headers"]["Authorization"], "Bearer test-key-not-real")
 
     def test_generic_provider_does_not_receive_thinking_when_unconfigured(self):

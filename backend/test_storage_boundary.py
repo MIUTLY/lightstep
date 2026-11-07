@@ -59,10 +59,11 @@ class StorageBoundaryTests(unittest.TestCase):
 
     def test_completing_task_does_not_save_receipt(self):
         self.start_task()
-        task = self.db.get_active_task(self.uid)
-        count = len(json.loads(task["levels_json"])["normal"])
-        self.db.update_active_task(self.uid, level=2, current_idx=count - 1)
-        r = self.client.post("/api/step/complete", json={"user_id": self.uid, "duration_ms": 30000})
+        # 按公开流程完成，避免依赖旧三清单的内部游标。
+        for _ in range(30):
+            r = self.client.post("/api/step/complete", json={"user_id": self.uid, "duration_ms": 30000})
+            if r.json()["state"] == "done":
+                break
         self.assertEqual(r.json()["state"], "done")
         self.assertIsNone(self.db.get_active_task(self.uid))
         self.assert_no_server_journal()

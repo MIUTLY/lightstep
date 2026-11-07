@@ -188,3 +188,53 @@ def derive_levels(normal: int) -> dict:
         "normal": normal,
         "coarse": max(1, normal - 1),
     }
+
+
+def decompose_forest(title: str) -> dict:
+    """离线时也生成完整父子关系；每次建任务生成一次，切换时不再改写。"""
+    import re
+
+    def middle(text, *leaves):
+        return {"text": text, "children": [{"text": leaf} for leaf in leaves]}
+
+    def root(*children):
+        return {"text": "；然后".join(child["text"] for child in children), "children": list(children)}
+
+    domain = domain_of(title)
+    if domain == "writing":
+        trees = [root(middle("打开文档，把标题写出来", "打开要写的文档", "在文档中写下标题"),
+                      middle("写三句话，先不管质量", "写第一句话，先不管质量", "写第二句话，先不管质量", "写第三句话，先不管质量")),
+                 root(middle("通读一遍，改一处不顺的地方", "通读刚写下的三句话", "把其中一处不顺的地方改好"))]
+    elif domain == "vocab":
+        match = re.search(r"([0-9]+)\s*个?\s*(?:单词|词汇)", title)
+        digits = (match.group(1).lstrip("0") or "0") if match else "5"
+        count = 100 if len(digits) > 3 else int(digits)
+        # 大范围目标的离线启动段明确标注区间，不伪称已覆盖整个长期目标。
+        count = max(1, min(count, 100))
+        trees = [root(middle("打开单词本", "打开单词本，定位到这次要学的词表"))]
+        for first in range(1, count + 1, 10):
+            chunks = []
+            for begin in range(first, min(first + 10, count + 1), 5):
+                end = min(begin + 4, count)
+                text = "过 5 个单词，遮住中文回忆" if begin == 1 and end == 5 else f"学习第{begin}到第{end}个单词，遮住中文回忆"
+                chunks.append(middle(text, *(f"读第{i}个单词，并遮住中文回忆含义" for i in range(begin, end + 1))))
+            trees.append(root(*chunks))
+        trees.append(root(middle("把记不住的标出来", "标记这次学习中没能回忆出的词")))
+    elif domain == "reading":
+        trees = [root(middle("翻开书，读 5 页", "把书翻到这次要读的位置", *(f"读这次的第{i}页" for i in range(1, 6)))),
+                 root(middle("读完用一句话写下讲了什么", "回想刚读内容的主题", "用一句话写下这个主题"))]
+    elif domain == "coding":
+        trees = [root(middle("定位到要改的地方", "打开要修改的文件", "定位并看清当前代码的行为"),
+                      middle("写最小可运行的改动", "写下这处改动", "保存修改过的文件")),
+                 root(middle("跑一遍，处理第一个报错", "运行修改后的程序", "若有报错，处理第一个报错；无报错则确认结果"))]
+    elif domain == "exercise":
+        trees = [root(middle("热身一下", "站到适合活动的位置", "缓慢活动肩膀和脚踝")),
+                 root(middle("动 10 分钟", "完成这次运动的前5分钟", "完成这次运动的后5分钟"))]
+    elif domain == "chores":
+        trees = [root(middle("收拾一个桌面", "把桌面物品按用途分开", "把桌面上要保留的物品放回原位")),
+                 root(middle("把垃圾丢掉", "收集刚才分出的垃圾", "把收集的垃圾放入垃圾桶"))]
+    else:
+        display_title = title if len(title) <= 160 else title[:157] + "…"
+        trees = [root(middle(f"把「{display_title}」的第一步做出来", f"打开或摊开「{display_title}」需要的材料", "完成眼前第一个可动手的动作")),
+                 root(middle("做一小步，然后停下", "检查刚才这一步的结果"))]
+    return {"trees": trees}

@@ -59,12 +59,12 @@ def commit(req: CommitRequest):
 
 @app.post("/api/step/complete")
 def step_complete(req: StepCompleteRequest):
-    return services.handle_step_complete(req.user_id, req.duration_ms)
+    return services.handle_step_complete(req.user_id, req.duration_ms, req.step_id)
 
 
 @app.post("/api/step/resize")
 def step_resize(req: StepResizeRequest):
-    return services.handle_resize(req.user_id, req.direction)
+    return services.handle_resize(req.user_id, req.direction, req.step_id)
 
 
 @app.post("/api/task/exit")

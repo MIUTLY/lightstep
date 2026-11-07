@@ -7,6 +7,7 @@ import json
 import logging
 
 from .config import settings
+from .task_forest import validate_blueprint
 from . import decompose as offline
 from .prompts import EMOTION_PROMPT, DECOMPOSE_PROMPT, PERSONA_SYSTEM, REPLY_PROMPT
 
@@ -46,7 +47,7 @@ class MockLLM(LLM):
         return offline.detect_emotion(text)
 
     def decompose(self, title: str) -> dict:
-        return offline.decompose(title)
+        return offline.decompose_forest(title)
 
     def reply(self, situation: str, text: str) -> str:
         return ""
@@ -62,16 +63,17 @@ class OpenAICompatLLM(LLM):
         self.temperature = s.llm_temperature
         self.timeout = s.llm_timeout
         self.max_tokens = s.llm_max_tokens
+        self.decompose_max_tokens = s.llm_decompose_max_tokens
         self.thinking = s.llm_thinking
 
-    def _chat(self, system: str, user: str, *, json_mode: bool = False) -> str:
+    def _chat(self, system: str, user: str, *, json_mode: bool = False, max_tokens: int | None = None) -> str:
         import httpx
 
         url = f"{self.base_url}/chat/completions"
         payload = {
             "model": self.model,
             "temperature": self.temperature,
-            "max_tokens": self.max_tokens,
+            "max_tokens": self.max_tokens if max_tokens is None else max_tokens,
             "messages": [
                 {"role": "system", "content": system},
                 {"role": "user", "content": user},
@@ -106,12 +108,13 @@ class OpenAICompatLLM(LLM):
 
     def decompose(self, title: str) -> dict:
         try:
-            ans = self._chat(PERSONA_SYSTEM, DECOMPOSE_PROMPT.format(title=title), json_mode=True)
+            ans = self._chat(PERSONA_SYSTEM, DECOMPOSE_PROMPT.format(title=title), json_mode=True,
+                             max_tokens=self.decompose_max_tokens)
             data = json.loads(ans)
-            return validate_levels(data)
+            return validate_blueprint(data)
         except Exception as error:
             logger.warning("LLM decomposition fallback (%s)", type(error).__name__)
-            return offline.decompose(title)
+            return offline.decompose_forest(title)
 
     def reply(self, situation: str, text: str) -> str:
         try:

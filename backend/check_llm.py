@@ -7,7 +7,8 @@ import time
 import httpx
 
 from app.config import settings
-from app.llm import OpenAICompatLLM, validate_levels
+from app.llm import OpenAICompatLLM
+from app.task_forest import validate_blueprint
 from app.prompts import PERSONA_SYSTEM, DECOMPOSE_PROMPT
 
 
@@ -26,10 +27,10 @@ def main():
                   "elapsed_seconds": round(time.monotonic() - started, 2),
                   "nonempty_reply": bool(answer)}
         if args.task:
-            levels = validate_levels(json.loads(client._chat(PERSONA_SYSTEM,
-                DECOMPOSE_PROMPT.format(title="复习操作系统的进程同步"), json_mode=True)))
+            levels = validate_blueprint(json.loads(client._chat(PERSONA_SYSTEM,
+                DECOMPOSE_PROMPT.format(title="复习操作系统的进程同步"), json_mode=True, max_tokens=client.decompose_max_tokens)))
             result["decomposition"] = "remote_ok"
-            result["step_counts"] = {key: len(value) for key, value in levels.items()}
+            result["tree_count"] = len(levels["trees"])
         print(json.dumps(result, ensure_ascii=False))
         return 0
     except httpx.HTTPStatusError as error:

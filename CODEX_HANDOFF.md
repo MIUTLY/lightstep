@@ -1,3 +1,5 @@
+> 最新后端任务（2026-11-07）：用户已确认三层父子任务森林、默认中档、按最小叶子保留完成进度。独立分支feat/task-forest，基于main 7f75a7d；实施提交c405a78d2b4c7b3a8b1fbc15ba58aacef836fd41。只改后端和协议/交接文档，未带入PR #10的计时及前端改动。详见[任务森林协议](docs/task-forest.md)和[最新交接](docs/handoff.md)。84项后端回归及mock冒烟通过，真实模型语义质量与前端联调未验收。
+
 > 2026-11-07追加：用户已明确授权合并PR #8；上一轮草稿限制已更新，未完成验收项仍保留。以[最新交接](docs/handoff.md)及[PR实际合并状态](https://github.com/MIUTLY/lightstep/pull/8)为准。
 
 # 轻步 LightStep：交给 Codex 的开发说明

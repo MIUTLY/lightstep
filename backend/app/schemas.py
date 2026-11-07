@@ -27,10 +27,12 @@ class CommitRequest(UserRequest):
 
 class StepCompleteRequest(UserRequest):
     duration_ms: Annotated[int, Field(strict=True, ge=0)]
+    step_id: Optional[NonEmptyText] = None
 
 
 class StepResizeRequest(UserRequest):
     direction: Literal["smaller", "bigger"]
+    step_id: Optional[NonEmptyText] = None
 
 
 class ExitRequest(UserRequest):
@@ -50,6 +52,10 @@ class TaskView(BaseModel):
     granularity: str  # fine | normal | coarse
     state: str       # ready | committing | executing | done
     step_id: str = ""  # 当前显示动作的稳定标识，计时不能只比较文字
+    plan_format: str = "legacy"
+    node_id: Optional[str] = None
+    parent_id: Optional[str] = None
+    remaining_leaf_ids: List[str] = []
     start_due_at: Optional[str] = None  # 待提醒预约的UTC ISO时间；消费/取消后null，不自动开始
 
 
