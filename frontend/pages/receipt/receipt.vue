@@ -104,6 +104,8 @@ async function onSave() {
 	if (saving.value) return
 	saving.value = true
 	try {
+		// 旧版 canvas 的 drawImage 不认包内路径，先解析成真实路径
+		const catPath = await resolveCatImage()
 		await new Promise((resolve) => {
 			const ctx = uni.createCanvasContext('receiptCanvas', instance.proxy)
 			drawReceipt(
@@ -112,7 +114,8 @@ async function onSave() {
 					steps: steps.value,
 					line: line.value,
 					date: dateLabel,
-					sensory: settings.sensory
+					sensory: settings.sensory,
+					catImagePath: catPath
 				},
 				resolve
 			)
@@ -124,6 +127,17 @@ async function onSave() {
 	} finally {
 		saving.value = false
 	}
+}
+
+/** 取小步图片的真实路径；失败就返回空串，让 canvas 走剪影兜底 */
+function resolveCatImage() {
+	return new Promise((resolve) => {
+		uni.getImageInfo({
+			src: '/static/xiaobu.png',
+			success: (res) => resolve(res.path || res.tempFilePath || ''),
+			fail: () => resolve('')
+		})
+	})
 }
 
 /** 用户主动攒进手帐（这才会上传） */

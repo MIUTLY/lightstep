@@ -73,11 +73,7 @@ page {
    所以这里必须逐个类名列出来，不能偷懒用通配。 */
 .theme-sensory .step-line,
 .theme-sensory .soft-line,
-.theme-sensory .cat-wrap,
-.theme-sensory .cat-body,
-.theme-sensory .cushion,
-.theme-sensory .eye,
-.theme-sensory .ear {
+.theme-sensory .cat-wrap {
 	animation: none !important;
 	transition: none !important;
 }

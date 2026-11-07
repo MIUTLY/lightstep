@@ -1,13 +1,6 @@
 <template>
 	<view class="cat-wrap" :class="['size-' + size, 'pose-' + pose]">
-		<view class="cushion"></view>
-		<view class="cat-body">
-			<view class="ear ear-l"></view>
-			<view class="ear ear-r"></view>
-			<view class="eye eye-l"></view>
-			<view class="eye eye-r"></view>
-			<view class="nose"></view>
-		</view>
+		<image class="cat-img" :src="src" mode="widthFix" :draggable="false" />
 	</view>
 </template>
 
@@ -15,166 +8,82 @@
 /**
  * 小步（黑猫）。
  *
- * 为什么用纯 CSS 画而不用图片：
- *   1. 小程序（mp-weixin）模板里不支持内联 <svg>，用图片又得带一堆 png 资源；
- *   2. 纯 CSS 才能跟着步数换姿势（策划书 9.2：1 步瘫着 / 3 步坐起 / 5 步伸懒腰），
- *      而且感官友好模式下能一键关掉所有过渡。
+ * 资源：static/xiaobu.png —— 400×238、透明底，由设计稿 形象.png 裁掉四周留白后降采样
+ * （原图 1536×1429 / 466.8 KB → 56.6 KB），深炭灰猫身 + 奶白淡云，与策划书 9.4 一致。
  *
- * pose: sleep（瘫着）/ awake（半睁眼）/ sit（坐起来一点）/ stretch（伸懒腰）
- * size: sm（角落 72rpx）/ md（120rpx）/ lg（200rpx）
+ * 为什么用 image 而不是继续用 CSS 画：
+ *   1. 美术资源已经确定，CSS 画出来的必然不像；
+ *   2. 一张 56 KB 的图不会撑大包体，却能让形象完全可控。
+ *
+ * 姿势（策划书 9.2「小步跟着你醒过来」）：美术目前只给了一张「瘫着」，所以四个姿势
+ * 都指向同一张图。以后每个姿势拿到独立素材，只改 POSE_IMAGES 这张映射表即可，
+ * 调用方（chat / focus / receipt）一行都不用动。
+ *
+ * size 只控制宽度，高度按图片比例自动（mode="widthFix"）。
  */
-defineProps({
+import { computed } from 'vue'
+
+const props = defineProps({
+	/** sleep（瘫着）/ awake（半睁眼）/ sit（坐起）/ stretch（伸懒腰） */
 	pose: { type: String, default: 'sleep' },
+	/** sm 96rpx / md 180rpx / lg 340rpx */
 	size: { type: String, default: 'md' }
 })
+
+const POSE_IMAGES = {
+	sleep: '/static/xiaobu.png',
+	awake: '/static/xiaobu.png',
+	sit: '/static/xiaobu.png',
+	stretch: '/static/xiaobu.png'
+}
+
+const src = computed(() => POSE_IMAGES[props.pose] || POSE_IMAGES.sleep)
 </script>
 
 <style scoped>
 .cat-wrap {
-	position: relative;
 	flex: none;
-	transition: transform var(--dur) linear;
+	display: flex;
+	align-items: flex-end;
+	justify-content: center;
+	transition: opacity var(--dur) linear;
+}
+
+.cat-img {
+	display: block;
+	/* 必须显式给宽度：小程序 <image> 默认 320×240px，
+	   不写宽度的话头像会直接撑成 320px 宽，把顶栏顶得极高 */
+	width: 100%;
+	height: auto;
 }
 
 .size-sm {
-	width: 72rpx;
-	height: 72rpx;
+	width: 96rpx;
 }
 
 .size-md {
-	width: 120rpx;
-	height: 120rpx;
+	width: 180rpx;
 }
 
 .size-lg {
-	width: 200rpx;
-	height: 200rpx;
+	width: 340rpx;
 }
 
-/* 半埋着的那块「像沙发又像云」的东西 */
-.cushion {
-	position: absolute;
-	left: 2%;
-	right: 2%;
-	bottom: 0;
-	height: 24%;
-	border-radius: 50%;
-	background-color: var(--accent-soft);
-	transition: background-color var(--dur) linear;
+/* 姿势只做极轻微的差别，避免「同一张图却假装四个状态」显得假；
+   真正的四张素材接上后，这里就不用动了 */
+.pose-sleep {
+	opacity: 0.96;
 }
 
-.cat-body {
-	position: absolute;
-	left: 10%;
-	right: 10%;
-	bottom: 8%;
-	height: 72%;
-	background-color: var(--cat);
-	border-radius: 50% 50% 44% 44% / 58% 58% 42% 42%;
-	transition: background-color var(--dur) linear, height var(--dur) linear,
-		transform var(--dur) linear;
+.pose-awake {
+	opacity: 1;
 }
 
-/* 耳朵：上半圆、下半尖的叶片形，向内收着长在头顶两侧 —— 别画成圆熊耳 */
-.ear {
-	position: absolute;
-	top: -20%;
-	width: 25%;
-	height: 40%;
-	background-color: var(--cat);
-	border-radius: 76% 14% 76% 14%;
+.pose-sit {
+	opacity: 1;
 }
 
-.ear-l {
-	left: 14%;
-	transform: rotate(-12deg);
-}
-
-.ear-r {
-	right: 14%;
-	transform: rotate(12deg);
-}
-
-/* 眼睛：半睁的琥珀色，永远不是圆的 */
-.eye {
-	position: absolute;
-	top: 34%;
-	width: 20%;
-	height: 14%;
-	border-radius: 50%;
-	background-color: var(--accent);
-	transition: height var(--dur) linear, background-color var(--dur) linear;
-}
-
-.eye-l {
-	left: 22%;
-}
-
-.eye-r {
-	right: 22%;
-}
-
-.nose {
-	position: absolute;
-	top: 58%;
-	left: 46%;
-	width: 8%;
-	height: 7%;
-	background-color: var(--surface);
-	border-radius: 50%;
-}
-
-/* ---------- 姿势 ---------- */
-
-.pose-sleep .cat-body {
-	height: 62%;
-	transform: scaleX(1.06) translateY(2%);
-}
-
-.pose-sleep .eye {
-	height: 5%;
-}
-
-.pose-sleep .ear {
-	transform: rotate(-4deg);
-}
-
-.pose-sleep .ear-r {
-	transform: rotate(4deg);
-}
-
-.pose-awake .cat-body {
-	height: 72%;
-}
-
-.pose-awake .eye {
-	height: 12%;
-}
-
-.pose-sit .cat-body {
-	height: 86%;
-	border-radius: 46% 46% 40% 40% / 62% 62% 38% 38%;
-}
-
-.pose-sit .eye {
-	height: 17%;
-}
-
-.pose-stretch .cat-body {
-	height: 66%;
-	transform: scaleX(1.16) rotate(-4deg);
-}
-
-.pose-stretch .eye {
-	height: 18%;
-	border-radius: 50% 50% 50% 50%;
-}
-
-.pose-stretch .ear-l {
-	transform: rotate(-26deg);
-}
-
-.pose-stretch .ear-r {
-	transform: rotate(26deg);
+.pose-stretch {
+	opacity: 1;
 }
 </style>

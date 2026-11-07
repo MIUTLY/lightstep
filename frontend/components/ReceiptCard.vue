@@ -93,7 +93,8 @@ defineProps({
 
 .ticket-cat {
 	margin-top: 40rpx;
-	height: 200rpx;
+	display: flex;
+	justify-content: center;
 }
 
 .title {
