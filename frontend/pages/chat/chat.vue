@@ -2,7 +2,7 @@
 	<view class="page-root" :class="themeClass" @touchstart="onUserTouch">
 		<view class="page-safe" :style="statusBarStyle"></view>
 
-		<!-- 顶栏：只有品牌 + 两个很小的入口，没有任何任务列表 / 打卡 -->
+		<!-- 顶栏：只留品牌。手帐 / 设置 两个入口已收进底部选择栏 -->
 		<view class="nav">
 			<view class="nav-left">
 				<CatBuddy :pose="catPose" size="sm" />
@@ -11,14 +11,17 @@
 					<text class="brand-sub">不催促 · 不吓你 · 不记仇</text>
 				</view>
 			</view>
-			<view class="nav-right">
-				<view class="nav-link" @tap.stop="goJournal">手帐</view>
-				<view class="nav-link" @tap.stop="goSettings">设置</view>
-			</view>
 		</view>
 
-		<!-- 对话区 -->
+		<!-- 初始态：小猫固定在屏幕正中央，下面一句问话 -->
+		<view v-if="showHero" class="hero">
+			<CatBuddy pose="sleep" size="hero" />
+			<text class="hero-text">我们要开始做什么呢？</text>
+		</view>
+
+		<!-- 对话区（说过话之后才出现气泡） -->
 		<scroll-view
+			v-else
 			class="chat-scroll"
 			scroll-y
 			:scroll-into-view="anchor"
@@ -29,10 +32,6 @@
 
 				<view v-if="session.busy" class="thinking">
 					<text class="muted tiny">…</text>
-				</view>
-
-				<view v-if="!session.messages.length && !session.busy" class="placeholder">
-					<text class="muted tiny">今天想做点什么？不想做也可以。</text>
 				</view>
 
 				<view id="bottom" class="anchor-bottom"></view>
@@ -64,6 +63,9 @@
 			</view>
 		</view>
 
+		<!-- 底部选择栏：手账 / 对话 / 设置 -->
+		<TabBar current="chat" />
+
 		<SoftLine :text="recallText" />
 	</view>
 </template>
@@ -72,8 +74,11 @@
 /**
  * 对话建任务页（策划书 F1 + 5 件小事 + 跨天交接）
  *
- * 这一页是唯一入口：说一句话 → 后端拆成极小的步骤 → 用户选个开始时间。
+ * 这一页是唯一的功能入口：说一句话 → 后端拆成极小的步骤 → 用户选个开始时间。
  * 页面本身不做任何「任务管理」，没有待办列表、没有今日目标、没有打卡。
+ *
+ * 布局：顶栏（品牌） / 中间（初始态=居中小猫+问句，之后=对话气泡） / 5 件小事 / 输入框 / 底部三 Tab
+ * 手帐与设置已不在右上角，统一由底部 <TabBar> 切换。
  */
 import { computed, nextTick, ref, watch } from 'vue'
 import { onHide, onShow } from '@dcloudio/uni-app'
@@ -82,6 +87,7 @@ import CatBuddy from '@/components/CatBuddy.vue'
 import ChatBubble from '@/components/ChatBubble.vue'
 import QuickActions from '@/components/QuickActions.vue'
 import SoftLine from '@/components/SoftLine.vue'
+import TabBar from '@/components/TabBar.vue'
 
 import { useSession } from '@/store/session.js'
 import { useSettings } from '@/store/settings.js'
@@ -108,6 +114,13 @@ const themeClass = computed(() => (settings.sensory ? 'theme-sensory' : ''))
 
 /** 小步的姿势跟着今日步数走（刚打开时完全瘫着） */
 const catPose = computed(() => catPoseOfSteps(todaySteps.value))
+
+/**
+ * 初始态判定：还没说过话、也没有进行中的任务时，中间放小猫 + 那句话。
+ * 用 session.hasTalked（说话后置位、存在 store 里）而不是 messages.length，
+ * 这样「温柔收尾」只留下一条小步的台词时，不会被误判成初始态而藏起来。
+ */
+const showHero = computed(() => !session.hasTalked && !session.task)
 
 const placeholder = computed(() =>
 	session.noteMode ? '记点什么…（走神的时候写下来）' : '说点什么，或者点上面的一件小事…'
@@ -241,14 +254,6 @@ async function onVoice() {
 	}
 }
 
-function goJournal() {
-	uni.navigateTo({ url: '/pages/journal/journal' })
-}
-
-function goSettings() {
-	uni.navigateTo({ url: '/pages/settings/settings' })
-}
-
 // 进入执行态就去单步页（策划书第二步到第四步的跳转）
 watch(
 	() => session.navIntent,
@@ -276,6 +281,8 @@ watch(
 	box-sizing: border-box;
 	height: 100vh;
 	overflow: hidden;
+	/* 给固定的底部选择栏让位 */
+	padding-bottom: calc(108rpx + env(safe-area-inset-bottom));
 }
 
 .nav {
@@ -316,17 +323,26 @@ watch(
 	color: var(--muted);
 }
 
-.nav-right {
+/* ---------- 初始态：小猫居中 + 一句问话 ---------- */
+
+.hero {
+	flex: 1;
+	height: 0;
 	display: flex;
+	flex-direction: column;
 	align-items: center;
-	flex: none;
+	justify-content: center;
+	padding: 0 56rpx 40rpx;
+	box-sizing: border-box;
 }
 
-.nav-link {
-	margin-left: 24rpx;
-	padding: 6rpx 4rpx;
-	font-size: 24rpx;
-	color: var(--muted);
+.hero-text {
+	margin-top: 44rpx;
+	font-size: 32rpx;
+	line-height: 1.5;
+	letter-spacing: 1rpx;
+	color: var(--ink-soft);
+	text-align: center;
 }
 
 .chat-scroll {
@@ -348,12 +364,6 @@ watch(
 	padding: 4rpx 8rpx 20rpx;
 }
 
-.placeholder {
-	display: flex;
-	justify-content: center;
-	padding: 80rpx 0;
-}
-
 .anchor-bottom {
 	height: 20rpx;
 }
@@ -372,7 +382,8 @@ watch(
 	align-items: center;
 	width: 100%;
 	box-sizing: border-box;
-	padding: 16rpx 24rpx calc(16rpx + env(safe-area-inset-bottom));
+	/* 底部安全区交给固定的 TabBar 处理，这里不再重复加 */
+	padding: 16rpx 24rpx 16rpx;
 	background-color: var(--surface);
 	border-top: 1rpx solid var(--line);
 }

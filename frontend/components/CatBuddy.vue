@@ -69,6 +69,11 @@ const src = computed(() => POSE_IMAGES[props.pose] || POSE_IMAGES.sleep)
 	width: 340rpx;
 }
 
+/* 首页空状态：小猫站在屏幕正中央，要大一档 */
+.size-hero {
+	width: 420rpx;
+}
+
 /* 姿势只做极轻微的差别，避免「同一张图却假装四个状态」显得假；
    真正的四张素材接上后，这里就不用动了 */
 .pose-sleep {

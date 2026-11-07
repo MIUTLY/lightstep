@@ -1,5 +1,8 @@
 <template>
 	<view class="page" :class="themeClass">
+		<!-- 底部选择栏（fixed，DOM 位置不影响定位） -->
+		<TabBar current="journal" />
+
 		<!-- 一句很轻的说明，不做统计、不做连续天数 -->
 		<view class="head">
 			<text class="muted tiny">回执攒在这里。你想翻就翻，不想翻它就不存在。</text>
@@ -67,6 +70,7 @@ import { computed, ref } from 'vue'
 import { onShow } from '@dcloudio/uni-app'
 
 import { journalAdd, journalDelete, journalList } from '@/api/index.js'
+import TabBar from '@/components/TabBar.vue'
 import { useSettings } from '@/store/settings.js'
 import { useUser } from '@/store/user.js'
 import { formatDateCN } from '@/utils/format.js'
@@ -132,7 +136,8 @@ function onDelete(entry) {
 <style scoped>
 .page {
 	min-height: 100vh;
-	padding: 24rpx 28rpx 60rpx;
+	/* 底部给固定选择栏让位 */
+	padding: 24rpx 28rpx calc(140rpx + env(safe-area-inset-bottom));
 	background-color: var(--bg);
 	color: var(--ink);
 }

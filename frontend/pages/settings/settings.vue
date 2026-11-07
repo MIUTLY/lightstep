@@ -1,5 +1,8 @@
 <template>
 	<view class="page" :class="themeClass">
+		<!-- 底部选择栏（fixed，DOM 位置不影响定位） -->
+		<TabBar current="settings" />
+
 		<!-- 神经友好三件套 -->
 		<view class="group">
 			<view class="group-title">
@@ -29,7 +32,7 @@
 			<view class="cell cell-disabled">
 				<view class="cell-main">
 					<text class="cell-title">显示全部步骤</text>
-					<text class="cell-sub">待接入：后端只返回当前这一步，没有完整步骤列表</text>
+					<text class="cell-sub">需后端新增接口：目前 /api 只返回当前这一步（current_step），没有完整步骤数组</text>
 				</view>
 				<switch :checked="false" :disabled="true" :color="switchColor" />
 			</view>
@@ -83,6 +86,7 @@ import { onShow } from '@dcloudio/uni-app'
 
 import { APP_VERSION } from '@/config/index.js'
 import { getBaseUrl, setBaseUrl } from '@/api/request.js'
+import TabBar from '@/components/TabBar.vue'
 import { useSettings } from '@/store/settings.js'
 import { useUser } from '@/store/user.js'
 
@@ -156,7 +160,8 @@ function goHistory() {
 <style scoped>
 .page {
 	min-height: 100vh;
-	padding: 20rpx 28rpx 80rpx;
+	/* 底部给固定选择栏让位 */
+	padding: 20rpx 28rpx calc(160rpx + env(safe-area-inset-bottom));
 	background-color: var(--bg);
 	color: var(--ink);
 }
