@@ -73,7 +73,12 @@ page {
    所以这里必须逐个类名列出来，不能偷懒用通配。 */
 .theme-sensory .step-line,
 .theme-sensory .soft-line,
-.theme-sensory .cat-wrap {
+.theme-sensory .cat-wrap,
+.theme-sensory .intro-hero,
+.theme-sensory .intro-input-row,
+.theme-sensory .chat-scroll,
+.theme-sensory .reminder-bar,
+.theme-sensory .composer {
 	animation: none !important;
 	transition: none !important;
 }

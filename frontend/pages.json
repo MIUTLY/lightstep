@@ -21,6 +21,20 @@
 			}
 		},
 		{
+			"path": "pages/focusmode/focusmode",
+			"style": {
+				"navigationStyle": "custom",
+				"disableScroll": true,
+				"navigationBarTitleText": "专注模式"
+			}
+		},
+		{
+			"path": "pages/memo/memo",
+			"style": {
+				"navigationBarTitleText": "备忘录"
+			}
+		},
+		{
 			"path": "pages/receipt/receipt",
 			"style": {
 				"navigationStyle": "custom",

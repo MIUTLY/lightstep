@@ -97,6 +97,17 @@ const currentStep = computed(() => {
 	return task && task.current_step ? task.current_step : '先歇一会儿。'
 })
 
+/**
+ * 字号自适应：任务森林（plan_format=forest_v1）生成出来的节点描述可能很长
+ * （实测有过 90+ 字的一段），56rpx 会撑满整屏。按长度降两档字号，保证仍然"一眼看完"。
+ */
+const stepSizeClass = computed(() => {
+	const n = (currentStep.value || '').length
+	if (n > 80) return 'step-sm'
+	if (n > 40) return 'step-md'
+	return ''
+})
+
 const catPose = computed(() => catPoseOfSteps(session.task ? session.task.steps_done : 0))
 
 const {
@@ -277,6 +288,18 @@ function backToChat() {
 	letter-spacing: 2rpx;
 	color: var(--ink);
 	text-align: center;
+}
+
+/* 长文本降档：40+ 字 / 80+ 字 */
+.step-text.step-md {
+	font-size: 44rpx;
+	line-height: 1.55;
+}
+
+.step-text.step-sm {
+	font-size: 34rpx;
+	line-height: 1.6;
+	letter-spacing: 1rpx;
 }
 
 @keyframes sync-in-a {

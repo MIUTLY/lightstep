@@ -1,7 +1,7 @@
 <template>
 	<view class="page" :class="themeClass">
-		<!-- 底部选择栏（fixed，DOM 位置不影响定位） -->
-		<TabBar current="settings" />
+		<!-- 左侧抽屉（fixed，默认隐藏，DOM 位置不影响布局） -->
+		<SideDrawer current="settings" />
 
 		<!-- 神经友好三件套 -->
 		<view class="group">
@@ -52,6 +52,14 @@
 				<text class="cell-arrow">改</text>
 			</view>
 
+			<view class="cell" @tap.stop="checkHealth">
+				<view class="cell-main">
+					<text class="cell-title">后端连接</text>
+					<text class="cell-sub">{{ healthText }}</text>
+				</view>
+				<text class="cell-arrow">{{ healthChecking ? '…' : '测' }}</text>
+			</view>
+
 			<view class="cell" @tap.stop="onResetIdentity">
 				<view class="cell-main">
 					<text class="cell-title">换一个人</text>
@@ -86,7 +94,8 @@ import { onShow } from '@dcloudio/uni-app'
 
 import { APP_VERSION } from '@/config/index.js'
 import { getBaseUrl, setBaseUrl } from '@/api/request.js'
-import TabBar from '@/components/TabBar.vue'
+import { health } from '@/api/index.js'
+import SideDrawer from '@/components/SideDrawer.vue'
 import { useSettings } from '@/store/settings.js'
 import { useUser } from '@/store/user.js'
 
@@ -98,6 +107,26 @@ const baseUrl = ref('')
 const themeClass = computed(() => (settings.sensory ? 'theme-sensory' : ''))
 const switchColor = computed(() => (settings.sensory ? '#666666' : '#d9872b'))
 
+/** 后端连接状态（新版后端提供 GET /api/health） */
+const healthText = ref('还没测过，点右边试试')
+const healthChecking = ref(false)
+
+async function checkHealth() {
+	if (healthChecking.value) return
+	healthChecking.value = true
+	try {
+		const res = await health()
+		const ok = res && (res.status === 'ok' || res.status === 'healthy')
+		healthText.value = ok
+			? '正常 · 存储 ' + (res.storage || '?') + ' · 回执 ' + (res.receipt_storage || '?')
+			: '返回异常：' + JSON.stringify(res)
+	} catch (e) {
+		healthText.value = '连不上（检查后端是否在跑、地址对不对）'
+	} finally {
+		healthChecking.value = false
+	}
+}
+
 const shortUserId = computed(() => {
 	const id = user.userId || ''
 	return id.length > 12 ? id.slice(0, 6) + '…' + id.slice(-4) : id
@@ -107,6 +136,8 @@ onShow(() => {
 	settings.load()
 	user.ensure()
 	baseUrl.value = getBaseUrl()
+	// 进设置页就顺手探一次，省得用户点
+	checkHealth()
 })
 
 function onSensoryChange(e) {
@@ -160,8 +191,8 @@ function goHistory() {
 <style scoped>
 .page {
 	min-height: 100vh;
-	/* 底部给固定选择栏让位 */
-	padding: 20rpx 28rpx calc(160rpx + env(safe-area-inset-bottom));
+	/* 底部没有常驻导航了，只留一点呼吸空间 + 安全区 */
+	padding: 20rpx 28rpx calc(48rpx + env(safe-area-inset-bottom));
 	background-color: var(--bg);
 	color: var(--ink);
 }
