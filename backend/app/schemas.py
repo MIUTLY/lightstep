@@ -1,48 +1,44 @@
 """请求 / 响应模型（Pydantic v2）。"""
-from typing import List, Optional
+from typing import Annotated, List, Literal, Optional
 
-from pydantic import BaseModel
+from pydantic import BaseModel, Field, StrictBool, StringConstraints
+
+NonEmptyText = Annotated[str, StringConstraints(strip_whitespace=True, min_length=1)]
+UserId = NonEmptyText
 
 
 # ---------- 请求 ----------
 
 class UserRequest(BaseModel):
-    user_id: str
+    user_id: UserId
 
 
-class ChatRequest(BaseModel):
-    user_id: str
-    message: str
+class ChatRequest(UserRequest):
+    message: NonEmptyText
 
 
-class ChooseTimeRequest(BaseModel):
-    user_id: str
-    when: str  # "now" | "later" | "not_today"
+class ChooseTimeRequest(UserRequest):
+    when: Literal["now", "later", "not_today"]
 
 
-class CommitRequest(BaseModel):
-    user_id: str
-    agree: bool
+class CommitRequest(UserRequest):
+    agree: StrictBool
 
 
-class StepCompleteRequest(BaseModel):
-    user_id: str
-    duration_ms: int  # 这一小步实际耗时（毫秒）
+class StepCompleteRequest(UserRequest):
+    duration_ms: Annotated[int, Field(strict=True, ge=0)]
 
 
-class StepResizeRequest(BaseModel):
-    user_id: str
-    direction: str  # "smaller"（太重了，拆细）| "bigger"（太简单了，加量）
+class StepResizeRequest(UserRequest):
+    direction: Literal["smaller", "bigger"]
 
 
-class ExitRequest(BaseModel):
-    user_id: str
-    gentle: bool = False
+class ExitRequest(UserRequest):
+    gentle: StrictBool = False
 
 
-class NoteRequest(BaseModel):
-    user_id: str
-    content: str
+class NoteRequest(UserRequest):
+    content: NonEmptyText
 
 
 # ---------- 响应 ----------
