@@ -249,7 +249,7 @@ class DB:
 
     def get_start_due_at(self, user_id: str) -> str | None:
         with self._conn() as c:
-            row = c.execute("SELECT due_at FROM task_start_reminders WHERE user_id=?", (user_id,)).fetchone()
+            row = c.execute("SELECT due_at FROM task_start_reminders WHERE user_id=? AND notified=0", (user_id,)).fetchone()
         return row["due_at"] if row else None
 
     def take_due_start_reminder(self, user_id: str) -> list[str]:

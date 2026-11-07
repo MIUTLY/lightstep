@@ -22,7 +22,7 @@
  *       granularity:   'fine'|'normal'|'coarse',   粒度（摩擦地图调档结果）
  *       state:         string,
  *       step_id:       string,
- *       start_due_at:  string|null   预约时间（UTC ISO），不会自动开始
+ *       start_due_at:  string|null   待提醒预约时间（UTC ISO），消费/取消后null，不会自动开始
  *     }
  * - 字段命名：后端用 snake_case，前端状态层一律沿用后端原名（current_step / steps_done /
  *   due_reminders），避免出现两套叫法；只有纯前端状态用 camelCase。
@@ -55,7 +55,7 @@ export function chooseTime(user_id, when) {
 
 /** 前台检查预约到点；返回一次后不再重复，不自动开始任务 */
 export function pollStartReminder(user_id) {
-	return post('/api/reminders/poll', { user_id })
+	return post('/api/reminders/poll', { user_id }, { silent: true })
 }
 
 /** 5 分钟轻承诺：agree = true（行）/ false（再想想） */

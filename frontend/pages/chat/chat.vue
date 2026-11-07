@@ -103,7 +103,7 @@ const inputFocus = ref(false)
 const anchor = ref('')
 const todaySteps = ref(0)
 const started = ref(false)
-let pageVisible = false
+let pageVersion = 0
 
 const themeClass = computed(() => (settings.sensory ? 'theme-sensory' : ''))
 
@@ -126,7 +126,7 @@ const {
 })
 
 onShow(async () => {
-	pageVisible = true
+	const version = ++pageVersion
 	settings.load()
 	user.ensure()
 
@@ -138,7 +138,7 @@ onShow(async () => {
 		await session.syncState()
 	}
 
-	if (!pageVisible) return
+	if (version !== pageVersion) return
 	session.startReminderChecks()
 	refreshToday()
 	scrollToBottom()
@@ -146,7 +146,7 @@ onShow(async () => {
 })
 
 function stopPageChecks() {
-	pageVisible = false
+	pageVersion += 1
 	session.stopReminderChecks()
 	stopRecall()
 }

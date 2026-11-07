@@ -97,6 +97,38 @@ class StartReminderTests(unittest.TestCase):
         self.assertEqual(self.poll()["due_reminders"], [])
         self.assertEqual(self.post("/api/session/open")["due_reminders"], [])
 
+    def test_consumed_schedule_is_not_exposed_as_pending_and_rebooking_rearms(self):
+        self.start()
+        scheduled = self.schedule()
+        due_at = scheduled["task"]["start_due_at"]
+        self.assertIsNotNone(due_at)
+        before = self.snapshot()
+        # 查询待提醒时间不消费，仍能到点取出。
+        self.assertEqual(self.db.get_start_due_at(self.uid), due_at)
+        self.assertEqual(self.snapshot(), before)
+        self.now += timedelta(minutes=5)
+        result = self.poll()
+        self.assertEqual(len(result["due_reminders"]), 1)
+        self.assertIsNone(result["task"]["start_due_at"])
+        state = self.client.get("/api/session/state", params={"user_id": self.uid}).json()
+        self.assertIsNone(state["task"]["start_due_at"])
+        self.assertEqual(self.rows()[0]["notified"], 1)
+        self.assertIsNone(DB(self.db.path).get_start_due_at(self.uid))
+        self.assertIsNotNone(self.schedule(10)["task"]["start_due_at"])
+        self.now += timedelta(minutes=10)
+        self.assertEqual(len(self.poll()["due_reminders"]), 1)
+
+    def test_open_consumes_schedule_and_returns_no_pending_deadline(self):
+        self.start()
+        self.schedule()
+        self.now += timedelta(minutes=5)
+        result = self.post("/api/session/open")
+        self.assertEqual(len(result["due_reminders"]), 1)
+        self.assertEqual(result["state"], "ready")
+        self.assertIsNone(result["task"]["start_due_at"])
+        self.assertEqual(self.poll()["due_reminders"], [])
+        self.assertIsNone(self.db.get_start_due_at(self.uid))
+
     def test_rebooking_replaces_old_deadline_and_can_rearm_after_notification(self):
         self.start()
         self.schedule()

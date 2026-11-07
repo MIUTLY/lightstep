@@ -127,6 +127,7 @@ export const useSession = defineStore('session', {
 			} else if (prevState === 'executing' && state.state !== 'executing') {
 				state.navIntent = 'chat'
 			}
+			reminderPoller.refresh()
 		}
 
 		/** 包一层错误处理：网络/后端错误只推一条系统小字，不打断对话 */
@@ -146,15 +147,20 @@ export const useSession = defineStore('session', {
 			}
 		}
 
+		function hasPendingStartReminder() {
+			return state.state === 'ready' && !!state.task && !!state.task.start_due_at
+		}
+
 		const reminderPoller = createStartReminderPoller(async (isCurrent) => {
-			if (state.busy || state.state !== 'ready' || !state.task || !state.task.start_due_at) return
+			if (state.busy || !hasPendingStartReminder()) return
 			const version = operationVersion
-			const reply = await api.pollStartReminder(uid())
+			const requestUser = uid()
+			const reply = await api.pollStartReminder(requestUser)
 			// 用户开始/改约/退出时，旧轮询结果不能恢复旧任务或显示旧提醒。
-			if (!isCurrent() || version !== operationVersion || state.busy) return
+			if (!isCurrent() || version !== operationVersion || requestUser !== uid() || state.busy) return
 			const due = Array.isArray(reply.due_reminders) && reply.due_reminders.length > 0
 			applyReply(reply, { silent: !due })
-		})
+		}, { shouldPoll: hasPendingStartReminder })
 
 		return {
 			displayLabel,
@@ -264,6 +270,7 @@ export const useSession = defineStore('session', {
 				state.reminders = Array.isArray(reply.due_reminders) ? reply.due_reminders : []
 				state.navIntent = 'chat'
 				pushCat(reply)
+				reminderPoller.refresh()
 			},
 
 			/** 拉一次今日小结（回执页用） */
@@ -277,12 +284,16 @@ export const useSession = defineStore('session', {
 
 			/** 拉一次当前状态（冷启动兜底：用户直接杀进程后重进） */
 			async syncState() {
-				operationVersion += 1
+				if (state.busy) return null
+				const version = ++operationVersion
+				const requestUser = uid()
 				try {
-					const data = await api.sessionState(uid())
+					const data = await api.sessionState(requestUser)
+					if (version !== operationVersion || requestUser !== uid() || state.busy) return null
 					state.state = data.state || 'idle'
 					state.task = data.task || null
 					syncStepTimer(state.task)
+					reminderPoller.refresh()
 					return data
 				} catch (e) {
 					return null

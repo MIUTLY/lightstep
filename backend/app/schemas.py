@@ -50,7 +50,7 @@ class TaskView(BaseModel):
     granularity: str  # fine | normal | coarse
     state: str       # ready | committing | executing | done
     step_id: str = ""  # 当前显示动作的稳定标识，计时不能只比较文字
-    start_due_at: Optional[str] = None  # UTC ISO时间；预约只提醒，不自动开始
+    start_due_at: Optional[str] = None  # 待提醒预约的UTC ISO时间；消费/取消后null，不自动开始
 
 
 class Reply(BaseModel):
