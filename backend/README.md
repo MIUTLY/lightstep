@@ -15,7 +15,7 @@ AI 学习搭子「小步」—— 一只懒洋洋的黑猫，帮你把「动一�
 - [团队与 Codex 协作约定](../AGENTS.md)
 
 已有离线任务流程和网页调试页；DeepSeek真实调用及项目任务创建已验证；对话质量、小程序联调与部署仍待验证。
-任务保护、参数/状态校验和粒度跳步已有修复分支；当前合并状态与剩余任务以交接记录为准。
+任务保护、参数/状态校验、粒度跳步和自然收尾已有修复分支；当前合并状态与剩余任务以交接记录为准。
 后续按任务开分支并提交 PR，由另一位队员检查后合并。
 
 ## 快速开始
@@ -58,6 +58,8 @@ python smoke_test.py     # 跑一遍全流程冒烟测试（离线、无需 key�
 
 ### 7. 5 件小事
 换件小事、发呆、今天什么都不想干、走神记笔记、温柔收尾 —— 都只轻轻接住，不评判。
+
+完整收尾表达可结束当前任务；“我累了”会保留进度并给出结束/拆小选择。否定、条件、提问或便签中的结束文字不会仅因包含关键词而退出。常用规则及识别边界见[接口说明](../docs/api.md)。
 
 ## API 一览
 
@@ -118,4 +120,4 @@ backend/
 
 模型回归检查：python -m unittest -v test_llm.py test_storage_boundary.py。
 
-任务与粒度回归：python -m unittest -v test_step_plan.py test_task_flow.py test_llm.py test_storage_boundary.py（36项）。仓库根目录运行 node --test frontend/tests/stepIdentity.test.mjs backend/test_local_journal.cjs（6项）。后者只检查纯逻辑，不代表小程序构建或真机联调完成。
+任务与粒度回归：python -m unittest -v test_ending_intent.py test_step_plan.py test_task_flow.py test_llm.py test_storage_boundary.py（44项）。仓库根目录运行 node --test frontend/tests/stepIdentity.test.mjs backend/test_local_journal.cjs（6项）。后者只检查纯逻辑，不代表小程序构建或真机联调完成。
