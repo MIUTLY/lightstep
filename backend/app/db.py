@@ -233,6 +233,30 @@ class DB:
             c.execute("DELETE FROM active_task WHERE user_id=?", (user_id,))
             c.execute("DELETE FROM task_start_reminders WHERE user_id=?", (user_id,))
 
+    def update_plan_if_current(self, task: dict, levels_json: str, level: int, current_idx: int,
+                               *, completed: bool = False, finished: bool = False) -> bool:
+        """新森林的进度与完成计数在同一事务提交；旧快照不能覆盖较新进度。"""
+        fields = ("title", "levels_json", "level", "current_idx", "steps_done", "state", "date")
+        with self._conn() as c:
+            c.execute("BEGIN IMMEDIATE")
+            row = c.execute("SELECT * FROM active_task WHERE user_id=?", (task["user_id"],)).fetchone()
+            if not row or any(row[key] != task[key] for key in fields):
+                return False
+            if completed:
+                c.execute(
+                    "INSERT INTO day_log (user_id, date, title, steps_done) VALUES (?, ?, ?, 1) "
+                    "ON CONFLICT(user_id, date, title) DO UPDATE SET steps_done=steps_done+1",
+                    (task["user_id"], today_str(), task["title"]))
+            if finished:
+                c.execute("DELETE FROM active_task WHERE user_id=?", (task["user_id"],))
+                c.execute("DELETE FROM task_start_reminders WHERE user_id=?", (task["user_id"],))
+            else:
+                c.execute(
+                    "UPDATE active_task SET levels_json=?, level=?, current_idx=?, steps_done=?, updated_at=? "
+                    "WHERE user_id=?",
+                    (levels_json, level, current_idx, task["steps_done"] + int(completed), now_iso(), task["user_id"]))
+        return True
+
     def schedule_task_start(self, user_id: str, minutes: int) -> bool:
         if minutes not in (5, 10):
             raise ValueError("start delay must be 5 or 10 minutes")

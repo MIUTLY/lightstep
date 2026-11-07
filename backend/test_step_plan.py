@@ -42,12 +42,11 @@ class StepPlanTests(unittest.TestCase):
         return result.json()
 
     def start(self, title="背单词", normal=None):
-        if normal is None:
-            self.post("/api/chat", message=title)
-        else:
-            levels = {"fine": ["另一套细清单"], "normal": normal, "coarse": ["另一套粗清单"]}
-            with patch.object(self.llm, "decompose", return_value=levels):
-                self.post("/api/chat", message=title)
+        # 这些是旧队列的兼容回归；新建森林的产品规则在test_task_forest覆盖。
+        from app.decompose import decompose
+        levels = decompose(title) if normal is None else {"fine": ["另一套细清单"], "normal": normal, "coarse": ["另一套粗清单"]}
+        self.db.ensure_user(self.uid)
+        self.db.create_active_task(self.uid, title, json.dumps(step_plan.new_plan(levels, 2)), 2, state="ready")
         self.post("/api/task/choose_time", when="now")
         return self.post("/api/task/commit", agree=True)
 

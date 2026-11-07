@@ -59,7 +59,7 @@ def main():
         show(f"太重了(第{i + 1}次)", client.post("/api/step/resize", json={"user_id": uid2, "direction": "smaller"}))
     client.post("/api/task/exit", json={"user_id": uid2})
     r = show("再背单词", client.post("/api/chat", json={"user_id": uid2, "message": "背单词"}))
-    assert r["task"]["granularity"] == "fine", f"摩擦地图应让默认粒度变细，实际 {r['task']['granularity']}"
+    assert r["task"]["granularity"] == "normal", "新森林按产品规则始终从中档开始，保留摩擦记录但不覆盖默认档位"
 
     # ===== 跨天温柔交接 =====
     print("\n===== 跨天温柔交接 =====")

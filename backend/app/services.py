@@ -16,8 +16,9 @@ from .db import db
 from .decompose import domain_of
 from .ending_intent import ending_intent
 from .granularity import judge, shift_level, level_name
-from . import step_plan
+from . import step_plan, task_forest
 from .llm import llm
+from .decompose import decompose_forest
 from .schemas import Reply, TaskView
 
 # ---------- 意图关键词 ----------
@@ -26,8 +27,8 @@ _NEGATIVE = ["不想", "不要", "算了", "不用", "不做", "不做了"]
 _GOAL_INTENT = ["想", "要", "得", "该", "准备", "打算", "试试", "试着", "今晚", "今晚要", "开始做"]
 _GOAL_VERBS = ["刷题", "写", "背", "读", "看", "学", "复习", "整理", "收拾", "跑步", "健身",
                "运动", "练", "做题", "改", "画", "做"]
-_TOO_BIG = ["太多", "太重", "太大", "好难", "太难", "做不完", "好多", "缩小", "拆细", "拆小", "太累", "有点难"]
-_TOO_EASY = ["太简单", "太容易", "加量", "加一点", "不够", "太少", "放大", "太轻松"]
+_TOO_BIG = ["太多", "太重", "太大", "好难", "太难", "做不完", "好多", "缩小", "拆细", "拆小", "太累", "有点难", "轻一点"]
+_TOO_EASY = ["太简单", "太容易", "加量", "加一点", "不够", "太少", "放大", "太轻松", "重一点"]
 _NOTE = ["记一下", "记个", "记得", "别忘", "提醒我", "备忘", "记下", "帮我记"]
 _AFK = ["手机", "视频", "打游戏", "玩游戏", "抖音", "短视频", "刷", "走神", "发呆", "摸鱼", "躺一会儿"]
 _REST = ["什么都不想干", "不想干", "今天休息", "放假", "躺平", "摆烂", "休息一天", "今天不想", "不干了"]
@@ -93,18 +94,32 @@ def _levels_of(task: dict) -> dict:
     return json.loads(task["levels_json"])
 
 
+def _forest_plan(task: dict) -> dict | None:
+    if not task_forest.is_forest(_levels_of(task)):
+        return None
+    try:
+        return task_forest.read(task)
+    except (ValueError, KeyError, TypeError, RecursionError) as error:
+        raise HTTPException(status_code=409, detail={
+            "code": "INVALID_TASK_PLAN", "message": "任务结构暂时无法读取，进度已保留。"}) from error
+
+
 def _current_step_text(task: dict) -> str:
-    return step_plan.current_text(task)
+    plan = _forest_plan(task)
+    return task_forest.view(plan)["current_step"] if plan is not None else step_plan.current_text(task)
 
 
 def _task_view(task: dict) -> TaskView:
+    plan = _forest_plan(task)
+    extra = task_forest.view(plan) if plan is not None else {
+        "current_step": step_plan.current_text(task), "step_id": step_plan.step_id(task)}
     return TaskView(
         title=task["title"],
-        current_step=_current_step_text(task),
         steps_done=task["steps_done"],
         granularity=level_name(task["level"]),
         state=task["state"],
-        step_id=step_plan.step_id(task),
+        plan_format="forest_v1" if plan is not None else "legacy",
+        **extra,
         start_due_at=db.get_start_due_at(task["user_id"]) if task["state"] == "ready" else None,
     )
 
@@ -112,6 +127,8 @@ def _task_view(task: dict) -> TaskView:
 def _buttons_for(task) -> list[str]:
     if not task:
         return []
+    if task["state"] == "executing" and task_forest.is_forest(_levels_of(task)):
+        return ["轻一点", "完成这一步", "重一点", "今天到这吧"]
     return {
         "ready": _START_BUTTONS,
         "committing": ["行", "再想想"],
@@ -237,7 +254,8 @@ def _chat_reply(user_id: str, text: str) -> Reply:
                      buttons=["今天到这吧", "太重了"])
 
     resize_request = _has_any(text, ("帮我拆小", "帮我拆细", "能拆小", "能拆细", "可以拆小",
-                                    "可以拆细", "能不能拆小", "能不能拆细", "帮我加量"))
+                                    "可以拆细", "能不能拆小", "能不能拆细", "帮我加量",
+                                    "能轻一点", "可以轻一点", "帮我轻一点", "能重一点", "可以重一点", "帮我重一点"))
     if task and _is_question(text) and not resize_request:
         return _answer_current_step(task, text)
 
@@ -298,24 +316,19 @@ def _answer_current_step(task: dict, text: str) -> Reply:
 def _create_task(user_id: str, text: str) -> Reply:
     title = _extract_title(text)
     domain = domain_of(title)
-    emotion = llm.detect_emotion(text)
-
-    # 摩擦地图：该领域的默认粒度作为起点
-    friction = db.get_friction(user_id, domain)
-    level = friction["default_level"]
-    if emotion in ("焦虑", "低落"):
-        level = max(1, level - 1)
-    elif emotion == "亢奋":
-        level = min(3, level + 1)
-
+    # 新规则明确从中档开始；旧摩擦与情绪记录不覆盖用户的默认档位。
+    level = 2
     decomposed = llm.decompose(title)
-    levels_json = json.dumps(step_plan.new_plan(decomposed, level), ensure_ascii=False)
+    try:
+        levels = task_forest.new_plan(decomposed)
+    except (ValueError, TypeError, KeyError):
+        # 第三方适配器返回旧三清单等非法结果时，仍不能把坏结构存入任务。
+        levels = task_forest.new_plan(decompose_forest(title))
+    levels_json = json.dumps(levels, ensure_ascii=False)
     db.create_active_task(user_id, title, levels_json, level, state="ready")
     task = db.get_active_task(user_id)
 
     reply = persona.task_ready(title, domain)
-    if friction["default_level"] <= 1:
-        reply = persona.friction_note() + " " + reply
     reply = f"{reply} {persona.ask_when()}"
     return Reply(reply=reply, state="ready", task=_task_view(task),
                  buttons=_START_BUTTONS)
@@ -355,18 +368,23 @@ def handle_commit(user_id: str, agree: bool) -> Reply:
         step = _current_step_text(task)
         return Reply(reply=f"{persona.commit_agree()} 「{step}」", state="executing",
                      task=_task_view(db.get_active_task(user_id)),
-                     buttons=["完成这一步", "太重了", "今天到这吧"])
+                     buttons=_buttons_for(db.get_active_task(user_id)))
     db.update_active_task(user_id, state="ready")
     return Reply(reply=persona.commit_disagree(), state="ready", task=_task_view(db.get_active_task(user_id)),
                  buttons=_START_BUTTONS)
 
 
-def handle_step_complete(user_id: str, duration_ms: int) -> Reply:
+def handle_step_complete(user_id: str, duration_ms: int, step_id: str | None = None) -> Reply:
     if type(duration_ms) is not int or duration_ms < 0:
         raise HTTPException(status_code=422, detail="duration_ms必须为非负整数。")
     task = _require_task_state(user_id, ("executing",))
     if not task:
         return Reply(reply=persona.afk_due(), state="idle")
+
+    _validate_step_id(task, step_id)
+    plan = _forest_plan(task)
+    if plan is not None:
+        return _complete_forest_step(user_id, task, plan, duration_ms)
 
     direction = judge(duration_ms)
     domain = domain_of(task["title"])
@@ -413,11 +431,16 @@ def _complete(user_id: str, task: dict, steps_done: int) -> Reply:
                  summary=_summary_text(summary), buttons=[])
 
 
-def handle_resize(user_id: str, direction: str) -> Reply:
+def handle_resize(user_id: str, direction: str, step_id: str | None = None) -> Reply:
     _validate_choice(direction, ("smaller", "bigger"))
     task = _require_task_state(user_id, ("ready", "committing", "executing"))
     if not task:
         return Reply(reply=persona.afk_due(), state="idle")
+
+    _validate_step_id(task, step_id)
+    plan = _forest_plan(task)
+    if plan is not None:
+        return _resize_forest(user_id, task, plan, direction)
 
     gdir = "down" if direction == "smaller" else "up"
     domain = domain_of(task["title"])
@@ -440,6 +463,51 @@ def handle_resize(user_id: str, direction: str) -> Reply:
         reply = f"{persona.shrink() if direction == 'smaller' else persona.grow()} 现在这一步：「{step}」"
     return Reply(reply=reply, state=task2["state"], task=_task_view(task2),
                  buttons=_buttons_for(task2))
+
+
+def _validate_step_id(task: dict, expected: str | None) -> None:
+    if expected is not None and expected != _task_view(task).step_id:
+        raise HTTPException(status_code=409, detail={
+            "code": "STALE_TASK_STEP", "message": "当前步骤已经变化，请刷新后再操作。"})
+
+
+def _save_forest(task: dict, plan: dict, *, completed=False, finished=False) -> dict:
+    level = task["level"] if finished else plan["nodes"][plan["current_node_id"]]["level"]
+    levels_json = json.dumps({task_forest.KEY: plan}, ensure_ascii=False)
+    index = task_forest.cursor(plan)
+    if not db.update_plan_if_current(task, levels_json, level, index, completed=completed, finished=finished):
+        raise HTTPException(status_code=409, detail={
+            "code": "STALE_TASK_STEP", "message": "任务已变化，已完成部分已保留，请刷新。"})
+    return dict(task, levels_json=levels_json, level=level, current_idx=index,
+                steps_done=task["steps_done"] + int(completed))
+
+
+def _complete_forest_step(user_id: str, task: dict, plan: dict, duration_ms: int) -> Reply:
+    finished = task_forest.complete(plan)
+    updated = _save_forest(task, plan, completed=True, finished=finished)
+    # 耗时仍可沉淀摩擦反馈，但不覆盖主动选择或默认中档，也不切到独立清单。
+    direction = judge(duration_ms)
+    if direction != "keep":
+        db.record_friction(user_id, domain_of(task["title"]), "smooth" if direction == "up" else "stuck")
+    if finished:
+        return Reply(reply="这次拆出的步骤做完了。先到这。", state="done",
+                     summary=_summary_text(db.get_today_summary(user_id)))
+    reply = f"好。下一步：「{_current_step_text(updated)}」"
+    notes = db.get_pending_notes(user_id)
+    if notes:
+        db.mark_notes_recalled(user_id)
+        reply = f"{persona.note_recall(notes)} {reply}"
+    return Reply(reply=reply, state=updated["state"], task=_task_view(updated), buttons=_buttons_for(updated))
+
+
+def _resize_forest(user_id: str, task: dict, plan: dict, direction: str) -> Reply:
+    if not task_forest.resize(plan, direction):
+        return Reply(reply=persona.boundary("down" if direction == "smaller" else "up"),
+                     state=task["state"], task=_task_view(task), buttons=_buttons_for(task))
+    updated = _save_forest(task, plan)
+    db.record_friction(user_id, domain_of(task["title"]), "stuck" if direction == "smaller" else "smooth")
+    return Reply(reply=f"现在这一步：「{_current_step_text(updated)}」", state=updated["state"],
+                 task=_task_view(updated), buttons=_buttons_for(updated))
 
 
 def _gentle_end(user_id: str, task: dict) -> Reply:
@@ -525,7 +593,7 @@ def resume_handoff(user_id: str) -> Reply:
     task = db.get_active_task(user_id)
     step = _current_step_text(task)
     return Reply(reply=persona.handoff_resume(step), state="executing", task=_task_view(task),
-                 buttons=["完成这一步", "太重了", "今天到这吧"])
+                 buttons=_buttons_for(task))
 
 
 def dismiss_handoff(user_id: str) -> Reply:
