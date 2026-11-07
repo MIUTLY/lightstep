@@ -40,7 +40,8 @@ def view(state, date=None):
     if active:
         i = find(state, active['item_id'])[1]
         active_item = dict(active, title=i['title'], scope=i['scope'], progress=progress(i['plan']), step=task_forest.view(i['plan']))
-    return {'state': 'executing' if active else 'memo', 'revision': state['revision'], 'date': date,
+    return {'navigation': {'sidebar_locked': bool(active), 'can_collapse_focus': not bool(active)},
+            'state': 'executing' if active else 'memo', 'revision': state['revision'], 'date': date,
             'items': items, 'focus': active_item,
             'all_completed': bool(items) and all(i['completed'] for i in items),
             'suggested_item_id': first['id'] if first else None,
@@ -102,6 +103,17 @@ def execute(db, ai, uid, request_id, command):
         payload = json.dumps(command, ensure_ascii=False, sort_keys=True)
         if previous and previous['payload'] != payload:
             raise HTTPException(409, 'request_id已用于不同操作。')
+        row = c.execute('SELECT data FROM memo_state WHERE user_id=?', (uid,)).fetchone()
+        state = json.loads(row[0]) if row else empty()
+        if command['action']=='focus_capture':
+            from . import focus_capture
+            focus_capture.prepare(c,uid,request_id,command,state)
+            saved=state.get('capture_batches',{}).get(command['_capture_context']['batch_id'])
+            if saved:
+                result = focus_capture.response(state,request_id,'succeeded',saved)
+                c.execute('INSERT OR REPLACE INTO memo_operations VALUES(?,?,?,?,?)',
+                          (uid,request_id,payload,attempt,json.dumps(result,ensure_ascii=False)))
+                return result
         if previous and previous['response']:
             cached = json.loads(previous['response'])
             if cached['operation']['status'] != 'failed':
@@ -114,16 +126,20 @@ def execute(db, ai, uid, request_id, command):
     try:
         token = AI_DEADLINE.set(monotonic()+getattr(ai, 'timeout', 30))
         try:
-            status, reply = apply(state, ai, command)
+            if command['action']=='focus_capture':
+                status, capture = focus_capture.apply(state,ai,command)
+                reply = ''
+            else:
+                status, reply = apply(state, ai, command)
         finally:
             AI_DEADLINE.reset(token)
         state['revision'] += 1
-        response = view(state)
+        response = focus_capture.response(state,request_id,status,capture) if command['action']=='focus_capture' else view(state)
         if reply: response['reply'] = reply
         response['operation'] = {'request_id': request_id, 'status': status}
     except AIError as error:
         state = original
-        response = view(state)
+        response = ({'revision':state['revision'],'capture':{'saved':False}} if command['action']=='focus_capture' else view(state))
         response.update(reply=error.message, operation={'request_id':request_id, 'status':'failed',
                          'error':{'code':error.code, 'message':error.message, 'retryable':True}})
     with db._conn() as c:

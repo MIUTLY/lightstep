@@ -1,3 +1,51 @@
+# 最新交接：专注桌宠新增任务的后端支持
+
+2026-11-07，独立分支feat/focus-capture，基于main 1c26b85433e11d734d0a1707013e5d9c1249b7ae（#13已合并）。实施提交[e2ccd906774261b25db51563a9d05dcfab2d0d7c](https://github.com/MIUTLY/lightstep/commit/e2ccd906774261b25db51563a9d05dcfab2d0d7c)。本轮核对未合并分支只有#10，不带入其前端计时。按既定分工只实施后端，前端桌宠及侧边栏限制未实现，不能把本轮当成完整微信功能验收。接口与前端清单见[focus-capture.md](focus-capture.md)。新PR供审查，不沿用此前合并授权自动合并。
+
+## 修改依据、实际改动及原因
+
+用户要求专注页新增专用桌宠输入，只新增备忘录任务，可按用户指定位置插入；不得因“结束/换成”等词退出或替换当前任务，不影响已有进度、档位和轻承诺，成功保存后才能确认，失败可重试且不能重复。
+
+- 新增backend/app/focus_capture.py：专用新增处理器，不调用旧意图分发。按AI结果追加、插入指定名称任务后或当前整项任务后；仅数组插入，旧项完整内容与相对顺序保留。不存在/同名目标返回简短澄清，明确选择候选ID后复用已识别任务。一个澄清链使用稳定batch_id，多个回答和重试只插入一批。
+- backend/app/llm.py：增加真实AI任务和位置提取以及独立语义审核；严格校验任务列表和placement枚举，不支持重要性重排、不使用关键词模板兜底；沿用memo操作超时预算。允许AI返回简短澄清。
+- backend/app/memo.py：复用原操作持久化、request_id参数校验、attempt和revision事务保护。capture_batches与清单、操作响应一起提交；已保存批次可重新确认但不重复插入。capture响应仅包含批次和反馈，无完整备忘录、森林或事件。查询视图增加navigation.sidebar_locked/can_collapse_focus，锁定由整项专注状态判断，不看小步骤完成数。
+- backend/app/main.py、schemas.py：新增POST /api/focus/capture，强制当前session_id及request_id；parent_request_id关联澄清，answer和anchor_id二选一；拒绝其他action或额外字段。数据库保存异常返回安全503提示，不能先回复“收到”。
+- 新增backend/test_focus_capture.py 18项；更新docs/api.md、requirements及新增focus-capture协议，记录参数、响应例子、失败/重试、并发、候选选择及前端所有入口限制。
+
+本轮不改变五分钟轻承诺的前端状态或截止时间。后端能验证active/session_id、当前节点/档位、完成集合、旧项顺序和事件不变；真实客户端是否重置计时需前端实测。专注侧边栏限制也是前端职责，服务器的锁定标记不等于已经实现页面路由拦截。
+
+## 测试命令与结果
+
+backend目录：
+
+```bash
+python -m unittest discover -s . -p 'test_*.py'
+python smoke_test.py
+```
+
+最终**144项全部通过**（此前126项+新增18项），39.087s；隔离SQLite冒烟通过。新增场景：默认追加多项、指定位置、当前整项后、目标缺失澄清、同名明确选择、多回答批次去重、非法候选、AI失败保留原输入重试、控制词安全、过期会话拒绝、AI期间进度变化/退出保护、重开重复确认、HTTP字段和紧凑响应、真实适配器非法位置/审核拒绝、AI澄清、单步仍锁定/整项完成或end才解锁，以及数据库提交失败回滚后重试。
+
+当前云环境沿用仓库外TestClient selector唤醒辅助，没有提交补丁或改业务断言。实际仓库根目录命令：
+
+```bash
+PYTHONDONTWRITEBYTECODE=1 PYTHONPATH=/workspace/work/pr8-runtime:/workspace/work:backend timeout 90s python -m unittest discover -s backend -p 'test_*.py'
+PYTHONDONTWRITEBYTECODE=1 PYTHONPATH=/workspace/work/pr8-runtime:/workspace/work:backend timeout 30s python backend/smoke_test.py
+```
+
+新接口通过TestClient HTTP验证；冒烟沿用旧流程兼容回归。Python AST、git diff --check通过，未修改任何frontend或backend/static文件。测试模型均为显式隔离替身，不声称真实供应商或微信实测完成。
+
+## 待验收与交接
+
+1. 前端需实现页面内桌宠、单击无响应/双击打开、关闭返回专注、保存成功后关闭及短气泡、失败保留输入、同批次去重。输入框不能展示完整备忘录。
+2. 前端统一拦截侧边栏、备忘录/手帐/设置、“收起”、返回、tab和内部跳转，页面恢复时核对focus。单步完成不能解锁；整项完成或明确end成功才恢复入口，end失败继续锁定。
+3. 前端须保留原五分钟截止时间，不因弹框、提交、失败/成功或后端revision变化重建专注。晚到响应不能恢复已退出会话。#10微信计时验收仍独立。
+4. 当前无真实AI凭据，任务/位置语义识别质量与真实延迟待测；单击/双击、气泡消失、路由绕行和真实轻承诺计时未执行平台验收。
+5. 插入当前专注所属日清单，跨天不自动移动任务；未定义跨日新归属规则。request_id须在首次提交前本地保存，收到同batch_id成功只弹一次气泡；后端去重不能替代客户端请求和显示管理。
+
+---
+
+以下为历史交接。
+
 # 最新交接：今日多任务备忘录与独立森林专注
 
 2026-11-07。基于main ce27b686120ee4590d393c68b47dae9389fa3d7e，独立分支feat/today-memo。本轮核对远端仅#10仍是未合并草稿，未带入其前端计时。实施提交[96c414ba21ddac4b4cb4e4083eeab4c433490c92](https://github.com/MIUTLY/lightstep/commit/96c414ba21ddac4b4cb4e4083eeab4c433490c92)。接口详见[today-memo.md](today-memo.md)。本轮新PR供审查，不沿用此前对#11/#12的合并授权。

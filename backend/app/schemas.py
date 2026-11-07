@@ -133,3 +133,12 @@ class MemoAck(MemoBase):
     event_id: NonEmptyText
 
 MemoCommand = Annotated[MemoIntake | MemoReorder | MemoSelect | MemoStep | MemoResize | MemoEnd | MemoAck, Field(discriminator='action')]
+
+
+class FocusCaptureRequest(MemoBase):
+    action: Literal['focus_capture'] = 'focus_capture'
+    session_id: NonEmptyText
+    text: NonEmptyText
+    parent_request_id: Optional[NonEmptyText] = None
+    answer: Optional[NonEmptyText] = None
+    anchor_id: Optional[NonEmptyText] = None

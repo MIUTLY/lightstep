@@ -3,6 +3,7 @@
 后端 API 在 /api/* 下；前端页面在项目根目录 static/ 下，打开 http://127.0.0.1:8000 即可。
 """
 import os
+import sqlite3
 
 from fastapi import FastAPI, HTTPException
 from fastapi.middleware.cors import CORSMiddleware
@@ -11,7 +12,7 @@ from fastapi.responses import JSONResponse
 from .llm import AIError
 
 from . import services, memo
-from .schemas import MemoCommand
+from .schemas import MemoCommand, FocusCaptureRequest
 from .config import settings
 from .schemas import (
     ChatRequest, ChooseTimeRequest, CommitRequest, ExitRequest,
@@ -153,6 +154,17 @@ def history(user_id: UserId):
 @app.get("/api/daily/summary")
 def daily_summary(user_id: UserId):
     return services.get_daily_summary(user_id)
+
+
+@app.post('/api/focus/capture')
+def focus_capture(req: FocusCaptureRequest):
+    if req.answer and req.anchor_id:
+        raise HTTPException(422, '请提供文字回答或选择一个位置，不要同时提供。')
+    try:
+        return memo.execute(services.db,services.llm,req.user_id,req.request_id,
+                            req.model_dump(exclude={'user_id','request_id'},exclude_none=True))
+    except sqlite3.Error:
+        raise HTTPException(503, '暂时无法保存新增任务，请保留输入并使用原request_id重试。') from None
 
 
 @app.get('/api/today')

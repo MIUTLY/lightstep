@@ -1,3 +1,5 @@
+> 最新：feat/focus-capture补齐专注桌宠新增任务的后端接口，真实AI位置识别、缺失/同名澄清、批次去重与会话保护。实施e2ccd906774261b25db51563a9d05dcfab2d0d7c，144项回归及隔离冒烟通过。前端桌宠/双击/气泡/侧边栏拦截和微信计时仍待对应成员实施验收。接口见[focus-capture.md](docs/focus-capture.md)，记录见[handoff.md](docs/handoff.md)。新PR不自动合并。
+
 > 最新任务：feat/today-memo实现后端今日多任务清单、独立森林专注和回执/手帐事实，代码96c414ba21ddac4b4cb4e4083eeab4c433490c92，126项回归及隔离冒烟通过。默认/chat协议已变化，前端需接入[today-memo.md](docs/today-memo.md)；真实AI样本及微信UI未验收。新PR不自动合并，#10继续独立。详见[交接](docs/handoff.md)。
 
 > 本轮合并状态（2026-11-07）：用户明确授权按#11→#12整合后端。#11已合并main，提交172432ab871ef5017587fa8a6dccbe89d57068eb；#12目标已改为main，本说明随其进入主线，最终merge SHA见[PR #12](https://github.com/MIUTLY/lightstep/pull/12)。已验证业务快照07e00747c5ee3071afc39a2c67265dae6294ce15（105项回归及隔离冒烟通过），业务实施bbe6f60。#10保持草稿，微信验收未完成；真实AI样本和微信端显示仍待验收，不因合并视为通过。详见[合并交接](docs/handoff.md)。下文为历史实施记录，旧“未合并/目标feat/task-forest”状态已更新。
