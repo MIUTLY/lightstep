@@ -2,6 +2,8 @@
 
 日期：2026-11-07（北京时间）。接手请先阅读根目录[CODEX_HANDOFF.md](../CODEX_HANDOFF.md)，其中包含全部已改内容、修改依据、PR关系、剩余任务、验证和用户要求。
 
+[草稿PR #8](https://github.com/MIUTLY/lightstep/pull/8)；初始保存提交[76c1187](https://github.com/MIUTLY/lightstep/commit/76c118710fffa511add8113513338b700ebad552)。当前功能仍在进行中。
+
 - 当前分支fix/start-reminder-options，基于PR #7的716057a；该PR尚未合并。
 - 已写5/10分钟预约、改约/取消/重启恢复/单次取出、UTC到期时间与新接口；uni-app按钮和前台检查也已接线。依据是策划的5/10分钟选择，以及旧半小时预约重复/遗留的问题。
 - 用户中途要求转交代码工作，因此本轮保存为草稿，不继续扩展功能或宣称完成微信验收。

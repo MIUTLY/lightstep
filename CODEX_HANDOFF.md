@@ -27,6 +27,7 @@
 | [#5](https://github.com/MIUTLY/lightstep/pull/5) | 粒度调整不跳步、稳定步骤标识 | 未合并；目标#4的分支 |
 | [#7](https://github.com/MIUTLY/lightstep/pull/7) | 自然收尾与疲惫反馈、防止误退 | 未合并；目标#5的分支 |
 | [#6](https://github.com/MIUTLY/lightstep/pull/6) | 与#7相同head分支，目标为main | 重复审查入口，包含前置修复；不要按独立功能再合一次 |
+| [#8](https://github.com/MIUTLY/lightstep/pull/8) | 本次5/10分钟预约进行中修改与完整交接说明 | 草稿，目标#7的分支；不能直接视为验收完成 |
 
 推荐保留增量审查顺序：#4合入main → 把#5目标改为main后审查合并 → 把#7目标改为main后审查合并。#6与#7二选一处理，建议核对后关闭重复的#6。本文未执行任何合并或关闭。
 
@@ -65,6 +66,8 @@ AI真实连通曾在此前轮次完成：供应商/models、最小聊天及项�
 ## 四、本次预约修改：进行中，交给下一位完成验收
 
 分支：fix/start-reminder-options；基线为fix/natural-task-ending的716057a。用户中途要求交接，因此本轮以草稿保存，不标为功能已全面完成。
+
+接手入口：[草稿PR #8](https://github.com/MIUTLY/lightstep/pull/8)；初始保存提交：[76c1187](https://github.com/MIUTLY/lightstep/commit/76c118710fffa511add8113513338b700ebad552)。后续文档提交同在该分支。
 
 已经写入代码：
 
