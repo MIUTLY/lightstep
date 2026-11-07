@@ -1,3 +1,20 @@
+# 最新交接：真实AI接入验证
+
+更新日期：2026-11-07。分支：feat/live-ai-integration；基于前后端分离分支09b23c0c5ec7f2fdfdbf11ead843f9033da3252a，原PR #1尚未合并，本轮PR以该分支为base，避免重复包含前一轮改动。
+
+- DeepSeek /models和最小聊天调用返回200；项目 /api/chat 真实完成情绪识别与任务拆解，返回ready和有效当前步骤。项目集成检查禁止离线兜底，确认有两次真实模型调用。
+- 密钥仅进程环境注入，未入源码或提交；没有配置持续运行的线上服务。详见 ai-integration.md。
+- 更新旧模型名为deepseek-flash；新增输出上限、可选思考模式、JSON输出约束与不泄露密钥的兜底日志。
+- 新增 check_llm.py：无离线兜底的真实连通检查；支持 --task 验证结构。
+- 修复B06：模型返回空档、数字步骤、非法对象或截断输出不再进入任务状态机。
+- 依赖补充httpx SOCKS支持，以沿用测试环境现有代理配置。
+- 变更文件：backend/.env.example、app/config.py、app/llm.py、requirements.txt、check_llm.py、test_llm.py、README.md、backend/README.md、docs/ai-integration.md、deployment.md、handoff.md。
+- 回归：13项Python测试、3项Node测试、独立临时数据库的离线smoke_test.py通过。
+- 仍未完成：B01、B03、B04/B05、B07、对话质量调优、小程序真机及生产部署；此前浏览器视觉验收受阻状态未改变。
+- 本轮提交：见本分支PR提交记录；前一轮提交与详细历史如下。
+
+---
+
 # 当前进度与交接：前后端分离
 
 更新日期：2026-11-07。分支：feat/frontend-backend-boundary。

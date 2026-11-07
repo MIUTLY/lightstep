@@ -1,0 +1,89 @@
+"""模型协议、异常兜底及非法结果的回归检查；不调用真实供应商。"""
+import contextlib
+import io
+import json
+import os
+from pathlib import Path
+import tempfile
+import unittest
+from unittest.mock import patch
+
+_boot = tempfile.TemporaryDirectory(prefix="lightstep-llm-unit-")
+os.environ["LIGHTSTEP_DB"] = str(Path(_boot.name) / "boot.db")
+os.environ["LLM_PROVIDER"] = "mock"
+
+import httpx
+from fastapi.testclient import TestClient
+from app.config import Settings
+from app.db import DB
+from app.llm import OpenAICompatLLM
+from app.main import app
+import check_llm
+
+
+class LLMTests(unittest.TestCase):
+    def setUp(self):
+        self.settings = Settings(llm_provider="openai", llm_api_key="test-key-not-real",
+                                 llm_thinking="disabled", llm_max_tokens=512)
+        self.llm = OpenAICompatLLM(self.settings)
+
+    def response(self, content, finish_reason="stop"):
+        return httpx.Response(200, request=httpx.Request("POST", "https://api.deepseek.com/chat/completions"),
+            json={"choices": [{"message": {"content": content}, "finish_reason": finish_reason}]})
+
+    def test_json_request_has_budget_and_optional_vendor_controls(self):
+        response = self.response('{"fine":["开文档"],"normal":["写一句"],"coarse":["写一段"]}')
+        with patch("httpx.post", return_value=response) as post:
+            result = self.llm.decompose("写论文")
+        self.assertEqual(result["normal"], ["写一句"])
+        kwargs = post.call_args.kwargs
+        self.assertEqual(kwargs["json"]["response_format"], {"type": "json_object"})
+        self.assertEqual(kwargs["json"]["thinking"], {"type": "disabled"})
+        self.assertEqual(kwargs["json"]["max_tokens"], 512)
+        self.assertEqual(kwargs["headers"]["Authorization"], "Bearer test-key-not-real")
+
+    def test_generic_provider_does_not_receive_thinking_when_unconfigured(self):
+        client = OpenAICompatLLM(Settings(llm_api_key="test", llm_thinking=""))
+        with patch("httpx.post", return_value=self.response("好")) as post:
+            client._chat("system", "user")
+        self.assertNotIn("thinking", post.call_args.kwargs["json"])
+
+    def test_bad_model_steps_cannot_cause_task_creation_500(self):
+        invalid = [[], {"fine": [], "normal": [42], "coarse": []},
+            {"fine": ["打开"], "normal": [" "], "coarse": ["写完"]}]
+        with tempfile.TemporaryDirectory(prefix="lightstep-bad-model-") as tmp:
+            db = DB(str(Path(tmp) / "test.db"))
+            with patch("app.services.db", db), patch("app.services.llm", self.llm), \
+                 patch.object(self.llm, "detect_emotion", return_value="正常"), TestClient(app) as client:
+                for index, data in enumerate(invalid):
+                    with self.subTest(data=data), patch.object(self.llm, "_chat", return_value=json.dumps(data)):
+                        response = client.post("/api/chat", json={"user_id": f"invalid-{index}", "message": "写论文"})
+                        self.assertEqual(response.status_code, 200)
+                        self.assertEqual(response.json()["state"], "ready")
+                        self.assertIsInstance(response.json()["task"]["current_step"], str)
+
+    def test_truncated_generation_is_rejected(self):
+        with patch("httpx.post", return_value=self.response("{", "length")):
+            with self.assertRaises(ValueError):
+                self.llm._chat("system", "user", json_mode=True)
+
+    def test_fallback_log_does_not_include_key_or_provider_body(self):
+        with patch.object(self.llm, "_chat", side_effect=RuntimeError("test-key-not-real private response")), \
+             self.assertLogs("app.llm", level="WARNING") as logs:
+            answer = self.llm.reply("idle", "你好")
+        self.assertEqual(answer, "")
+        self.assertNotIn("test-key-not-real", " ".join(logs.output))
+        self.assertNotIn("private response", " ".join(logs.output))
+
+    def test_probe_reports_failure_instead_of_offline_success(self):
+        output = io.StringIO()
+        with patch("check_llm.settings", self.settings), patch("sys.argv", ["check_llm.py"]), \
+             patch.object(OpenAICompatLLM, "_chat", side_effect=httpx.ConnectTimeout("test timeout")), \
+             contextlib.redirect_stdout(output):
+            code = check_llm.main()
+        self.assertEqual(code, 1)
+        self.assertEqual(json.loads(output.getvalue())["status"], "remote_failed")
+
+
+if __name__ == "__main__":
+    unittest.main()
