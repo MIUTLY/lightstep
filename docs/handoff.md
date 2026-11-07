@@ -2,6 +2,8 @@
 
 日期：2026-11-07。分支fix/natural-task-ending，基于PR #5的1b0e4ecc。PR #4/#5仍未合并，本轮PR目标为fix/preserve-step-sequence；下方为历史记录，当前进度以本节为准。
 
+实施提交：[1db31ed](https://github.com/MIUTLY/lightstep/commit/1db31ed7e4d3527d6db4ac86a013af010b045513)；[PR #7](https://github.com/MIUTLY/lightstep/pull/7)，尚未合并。
+
 ## 改了什么、依据与原因
 
 - B07：单说“我累了”“想休息一下”时保留任务与进度，提供“今天到这吧”“太重了”两个既有动作。疲惫不代表已经选择退出，不能擅自删掉任务。
