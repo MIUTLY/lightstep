@@ -1,3 +1,72 @@
+# 最新交接：真实AI任务森林生成与失败保留
+
+日期：2026-11-07（北京时间）。独立分支`fix/real-ai-task-generation`，基于尚未合并的PR [#11](https://github.com/MIUTLY/lightstep/pull/11) `feat/task-forest`头`039b26fcf14e59a58dff2f15ff04d1c929a7f7dd`。本PR先以feat/task-forest为base；#11合并后核对并改为main，不能绕过#11重复提交森林实现。不合并PR #10、不修改前端、网页静态文件、轻承诺计时、回执或手帐。
+
+实施提交：[bbe6f60b4b9e0a44f5816e5b643b0a3d35e7de62](https://github.com/MIUTLY/lightstep/commit/bbe6f60b4b9e0a44f5816e5b643b0a3d35e7de62)。本交接作为后续文档提交记录实际代码SHA，避免自引用提交编号。完整协议见[ai-task-generation.md](ai-task-generation.md)。
+
+## 修改、依据与原因
+
+用户本轮明确要求：实际用户任务仅由真实AI生成，取消领域模板替代具体目标及所有静默降级；原始输入、旧任务、完成进度在失败时保留，允许重试，沿用已确认森林关系。
+
+- `backend/app/llm.py`：移除MockLLM和所有离线回退。唯一真实兼容适配器；缺配置、连接、超时、认证、限流、服务故障、非法输出均转为安全中文错误，不输出原始供应商异常或密钥。新森林生成和独立内容复核共享逻辑预算，只在格式合法且目标相关/覆盖/父子一致/无重复全部通过时接受。支持关键歧义澄清。
+- `backend/app/decompose.py`：运行模块仅保留领域偏好分类，删除所有任务/情绪模板；历史固定数据移至`backend/tests/fakes.py`，只由测试显式注入，app/run.py不导入测试包，不存在mock运行开关。
+- `backend/app/config.py`、`backend/.env.example`：默认openai，保留空密钥示例。无配置服务可以启动，生成明确失败，已有森林不依赖AI。服务端改配置后须重启；旧环境LLM_PROVIDER=mock需清除/修改。
+- `backend/app/prompts.py`：用具体原始目标生成完整三层嵌套结构，允许必要追问，增加独立内容审核协议。拒绝“洗衣服”变成桌面清理等与目标无关的生成结果。
+- `backend/app/db.py`：只新增task_generation_drafts表，不重建旧表。保存最新草稿/原输入/澄清问答/错误和内部任务快照。有效生成在事务中同时比较草稿ID、当前任务快照，再原子替换；等待期间完成/退出等变化不可被覆盖。失败不触发提前删任务、取消预约或清理跨天任务。
+- `backend/app/services.py`：删除服务层第二层模板兜底；保留原始具体目标，不以领域或剥离后的标题送模型；补识别“洗衣/洗碗”等目标；成功后才显示准备好。失败返回明确reply、原task/state、failed草稿和“重试生成”。支持重开查询、重试、澄清问答；聊天可输入“重试生成”及“补充：答案”，不偷走已有步骤控制和普通提问。
+- `backend/app/main.py`、`schemas.py`：新增显式生成、草稿查询、重试和回答接口；session/state与open附带generation。生成业务失败返回200 Reply+generation.status=failed，不代表生成成功；普通AI问答异常返回502/503/504字符串detail，兼容现有错误显示。过期生成/重复成功重试409。
+- `backend/check_llm.py`：--task走与运行相同的真实生成+内容复核，无兜底。`backend/smoke_test.py`自动临时SQLite并显式注入替身，不再依赖运行离线模式。
+- `backend/test_ai_generation.py`新增21项；原7个测试模块迁移为显式测试替身，旧森林/队列兼容与既有业务断言继续保留，原模板成功断言改成明确失败。
+- 文档：AGENTS、根/后端README、requirements、architecture、api、deployment、local-development、ai-integration、task-forest及新ai-task-generation，统一运行只支持真实AI与失败/重试约定；CODEX_HANDOFF同步入口。
+
+## 验证命令与结果
+
+在backend目录，正常Python环境可执行：
+
+```bash
+python -m unittest discover -s . -p 'test_*.py' -v
+python smoke_test.py
+```
+
+本轮最终：**105项全部通过**（原84项+新增21项），隔离冒烟通过。测试仅用独立SQLite和显式模型/HTTP替身，不产生真实AI任务，也不证明供应商质量。
+
+当前云沙箱存在TestClient跨线程selector唤醒限制，使用仓库外loop_factory定时唤醒辅助；未将环境补丁提交项目。实际最终命令（仓库根目录）：
+
+```bash
+PYTHONDONTWRITEBYTECODE=1 PYTHONPATH=/workspace/work/pr8-runtime:/workspace/work:backend LIGHTSTEP_DB=/workspace/work/real-ai-boot.db timeout 90s python -m unittest discover -s backend -p 'test_*.py' -v
+```
+
+结果：105 tests / 37.315s / OK。冒烟在backend使用同一外部运行辅助：`PYTHONDONTWRITEBYTECODE=1 PYTHONPATH=/workspace/work/pr8-runtime:/workspace/work:. timeout 30s python smoke_test.py`，自动临时DB，通过。
+
+另外实际以python run.py启动无密钥后端（临时DB、关闭reload、端口18741）：/api/health正常；POST /api/chat输入“洗衣服”返回generation.status=failed、AI_NOT_CONFIGURED、idle/null，无模板成功。初次沙箱禁止socket绑定；使用单条命令网络权限重跑后通过，进程随后关闭。该项不调用供应商。
+
+Python AST解析、git diff --check通过。50个frontend/backend/static文本文件与#11基线逐blob一致；图片和其他未修改文件由远端基础树保留。
+
+### 覆盖场景
+
+- 洗衣、洗碗、桌面三种原始目标原样进入生成与复核，保存各自响应；这些是隔离数据，不能当成真实模型效果证明。
+- 无配置/遗留mock、连接失败、超时、401/403/429/500、空/截断/坏JSON/旧清单/非法森林、非法审核或任一审核项false：明确失败，不新建任务。
+- 结构正确但目标无关：语义审核reject后拒绝保存；审核超时也不保存未经审查的森林。
+- 替换失败保留旧任务完整JSON、完成叶子、步数、便签、预约、day_log及用户记录；失败草稿可重开/新DB实例后重试。
+- 必要澄清不创建新任务，回答携带原目标和问答继续；轻重控制不误当回答。
+- 等待期间完成步骤、更新目标/草稿：过期结果不得覆盖；旧ID和成功后的再次重试被拦截。
+- AI未配置时已有森林反复轻重切换、完成、查询和重开正常，完成集合不因切换改变，AI调用计数0。
+- 原森林对应节点/剩余内容/下一棵树/旧格式兼容、预约、参数/状态校验、自然收尾及数据边界回归继续通过。
+
+## 未解决与后续验收
+
+1. 当前环境无可用真实AI配置，未调用真实供应商。需配置后分别以“洗衣服”“洗碗”“整理桌面”实测，必要澄清后检查整片森林；旧协议历史连通成功不作本轮验收。
+2. 内容审核是同一真实供应商的独立请求，仍可能误判；测试证明拒绝路径，不是自然语言覆盖的形式化保证。实际时延、超时比例与语义准确度待样本验证。
+3. 本轮未改任何前端。reply提供明确可显示提示，聊天已有重试/补充入口；前端成员仍需核对微信实际展示及恢复generation、专用澄清UI。后端业务失败HTTP 200必须结合generation.status判断，不能只按HTTP状态判断成功。
+4. 其他接口原有跨天清理/历史规则、旧格式耗时兼容、未带step_id的网络幂等限制不在本轮改造；#10微信验收、预约可靠送达、回执/手帐本地保存独立推进。
+5. 本PR依赖#11，不直接合并；队友审查后再按用户决定处理合并。
+
+---
+
+# 以下为历史交接
+
+后文的默认mock/离线降级描述已由本轮真实AI规则替代，仅保留作历史记录。
+
 # 最新交接：后端三层任务森林与对应轻重切换
 
 日期：2026-11-07（北京时间）。按用户新规则另开feat/task-forest，基于main 7f75a7dc7c4c310050f10f23cf6378f2f20f5ebc。本轮只修改后端及文档，不合并PR #10、不带入计时/回执/手帐/前端改动。新PR提交后供审查，不直接合并。
