@@ -2,7 +2,7 @@
 	<view class="task-card">
 		<view class="task-head">
 			<text class="task-title">{{ task.title }}</text>
-			<text class="chip" :class="'chip-' + task.state">{{ stateLabel(task.state) }}</text>
+			<text v-if="task.state !== 'committing'" class="chip" :class="'chip-' + task.state">{{ stateLabel(task.state) }}</text>
 		</view>
 
 		<view v-if="task.current_step" class="task-step">
@@ -11,7 +11,7 @@
 		</view>
 
 		<view class="task-meta">
-			<text v-if="showMeta">已完成 {{ task.steps_done }} 小步 · 粒度 {{ granularityLabel(task.granularity) }}</text>
+			<text v-if="showMeta">已完成 {{ task.steps_done }} 小步</text>
 		</view>
 	</view>
 </template>
@@ -20,10 +20,10 @@
 /**
  * 任务快照卡（渲染后端 Reply.task，字段与后端 TaskView 完全同名）
  *
- * showMeta: 是否显示「已完成 N 小步 · 粒度 X」。
+ * showMeta: 是否显示「已完成 N 小步」。粒度仅用于内部调整，不展示。
  *   默认只在对话里显示一次；单步执行页不显示（策划书 F2：没有进度条、没有统计）。
  */
-import { stateLabel, granularityLabel } from '@/utils/format.js'
+import { stateLabel } from '@/utils/format.js'
 
 defineProps({
 	task: { type: Object, required: true },
