@@ -39,11 +39,11 @@ class StorageBoundaryTests(unittest.TestCase):
     def start_task(self):
         for path, payload in [
             ("/api/session/open", {}),
-            ("/api/chat", {"message": "背单词"}),
+            ("/api/chat", {"workflow": "legacy", "message": "背单词"}),
             ("/api/task/choose_time", {"when": "now"}),
             ("/api/task/commit", {"agree": True}),
         ]:
-            response = self.client.post(path, json={"user_id": self.uid, **payload})
+            response = self.client.post(path, json={"user_id": self.uid, **({"workflow":"legacy"} if path.endswith("chat") else {}), **payload})
             self.assertEqual(response.status_code, 200)
 
     def assert_no_server_journal(self):
@@ -76,8 +76,8 @@ class StorageBoundaryTests(unittest.TestCase):
         self.start_task()
         expected = self.client.get("/api/session/state", params={"user_id": self.uid}).json()
         for path, payload in [("/api/note", {"content": "取快递"}),
-                              ("/api/chat", {"message": "帮我记一下取快递"})]:
-            reply = self.client.post(path, json={"user_id": self.uid, **payload}).json()
+                              ("/api/chat", {"workflow": "legacy", "message": "帮我记一下取快递"})]:
+            reply = self.client.post(path, json={"user_id": self.uid, **({"workflow":"legacy"} if path.endswith("chat") else {}), **payload}).json()
             self.assertEqual(reply["state"], expected["state"])
             self.assertEqual(reply["task"], expected["task"])
             self.assertEqual(self.client.get("/api/session/state",

@@ -1,3 +1,51 @@
+# 最新交接：今日多任务备忘录与独立森林专注
+
+2026-11-07。基于main ce27b686120ee4590d393c68b47dae9389fa3d7e，独立分支feat/today-memo。本轮核对远端仅#10仍是未合并草稿，未带入其前端计时。实施提交[96c414ba21ddac4b4cb4e4083eeab4c433490c92](https://github.com/MIUTLY/lightstep/commit/96c414ba21ddac4b4cb4e4083eeab4c433490c92)。接口详见[today-memo.md](today-memo.md)。本轮新PR供审查，不沿用此前对#11/#12的合并授权。
+
+## 依据、修改和原因
+
+用户将主流程明确为AI识别多个独立任务、今日备忘录、选定任务、专注森林、结束回执、全天全部完成手帐。旧active_task只能存一个目标，结束会清理任务，不能承载独立进度与中途续做，因此新增外层持久化状态，复用已完成的真实AI适配器及task_forest算法。
+
+- app/memo.py：按日保存有序清单，稳定任务ID与独立森林；单个全局专注会话记录本轮开始时完成集合。完整森林结束才标记整项完成，中途end仅结束会话；排序不开始/不切换/不重置。原始输入及操作记录持久化，可查询重试。
+- app/db.py：新增memo_state、memo_operations，不迁移或删除旧任务。状态revision、请求ID与attempt在事务内校验，任务进度、回执/手帐事件和成功操作结果原子提交；AI返回时已有并发变化则409而不覆盖。旧单任务写入与备忘录专注有事务互斥保护。
+- app/llm.py：真实AI提取独立任务并审核完整性/顺序/无增漏；真实AI明确范围，缺对象/数量简短追问，范围需审核，不把启动段冒充整项；随后复用森林生成和内容审核。新增ContextVar操作预算，范围/拆分/审核共享超时，避免跨请求共享可变超时状态。既有森林操作不调用AI。
+- app/main.py、schemas.py：默认/chat改为清单识别，要求request_id；新增/today查询、/today/command、操作记录查询。清单写操作拒绝多余字段，complete/resize强制session_id+step_id，排序带revision。session/open与state有清单数据时返回新流程状态并保留跨天数据。
+- 回执事实含整项完成/中途结束、本轮新增完成动作及所有剩余动作；手帐事件只由非空清单全部完成触发。稳定事件ID、revision、ack及客户端幂等保存协议防止重复处理。同日追加任务使原手帐事件eligible=false，再次完成更新同一事件，不生成第二个手帐身份。
+- 原单任务接口保留兼容；旧/chat测试显式workflow=legacy，旧数据原样保留。已有旧active_task时选择新清单项409，需先处理旧流程，不能同时专注两项。默认/chat接口变化需要前端接入，当前页面不能直接当成新流程已完成。
+- backend/test_memo.py新增21项；原测试及smoke_test显式声明legacy流程，避免测试替身成为运行模式。README、backend/README、requirements、api和新增today-memo同步主流程、接口、事件确认和前端职责。前端/静态页面、图片、随机素材、计时、回执渲染和本地手帐代码均未修改。
+
+## 验证
+
+在backend执行：
+
+```bash
+python -m unittest discover -s . -p 'test_*.py'
+python smoke_test.py
+```
+
+最终126项通过（旧105+新增21），耗时38.634s；隔离临时SQLite冒烟通过。新增覆盖：三项识别顺序和默认提示、排序持久化、不切换当前专注、选择第二项、十题五题中途退出续做、整项完成仅划掉对应项、全部完成手帐、空日不完成、重复完成/结束/ack不增加事件、失败保留与原输入重试、澄清、AI不可用时已生成森林切换、旧token拒绝、并发进度保护、单专注、跨天保留与原请求日期、当天追加后更新同一手帐ID、旧流程互斥、默认chat和command HTTP接口、真实适配器拒绝非法识别/审核/范围。
+
+当前云环境沿用仓库外TestClient selector唤醒辅助，未改业务断言，也未提交环境补丁。实际命令（仓库根目录）：
+
+```bash
+PYTHONDONTWRITEBYTECODE=1 PYTHONPATH=/workspace/work/pr8-runtime:/workspace/work:backend timeout 90s python -m unittest discover -s backend -p 'test_*.py'
+PYTHONDONTWRITEBYTECODE=1 PYTHONPATH=/workspace/work/pr8-runtime:/workspace/work:backend timeout 30s python backend/smoke_test.py
+```
+
+Python AST和git diff --check通过。代码以隔离AI/HTTP替身验证，不调用真实供应商，不把响应样例当成真实AI效果。
+
+## 未验证与前端交接
+
+- 本环境仍无真实供应商配置，三项识别的实际无增漏、写作业范围追问和完整拆分质量、多个模型调用的真实时延待验收。
+- 前端需接入清单/排序/选择/专注协议及request_id、revision、session_id、step_id。默认/chat返回已变化，本轮不修改队友界面。
+- 回执/手帐以event.id做本地唯一键，按revision更新，落地后ack；eligible=false不能生成当天全部完成手帐。后端不能独自保证跨客户端图片保存恰好一次，客户端刷新/失败恢复须联调。私人留言不上传。
+- 日期当前按Asia/Shanghai，跨天保留原日任务与进度，不自动移动到新日；其他时区/自定义日界限或手动跨日移动待产品另定。当天完成后追加任务采用更新同一手帐身份，前端需据事实更新原条目。
+- #10微信五分钟验收、预约可靠送达、回执/手帐实际本地图片保存仍是独立任务；本轮不宣称完成。
+
+---
+
+以下为历史交接。
+
 # 本轮合并交接：任务森林与真实AI生成进入main
 
 日期：2026-11-07（北京时间）。用户在查看各PR状态及未验收项后明确指示“该合并的你都合并吧”，本轮据此执行#11 → #12的后端合并，不再要求额外重复确认；未新增队友review记录，也不将用户合并授权写成测试或产品验收通过。

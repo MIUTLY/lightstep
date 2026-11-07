@@ -1,3 +1,5 @@
+> 最新任务：feat/today-memo实现后端今日多任务清单、独立森林专注和回执/手帐事实，代码96c414ba21ddac4b4cb4e4083eeab4c433490c92，126项回归及隔离冒烟通过。默认/chat协议已变化，前端需接入[today-memo.md](docs/today-memo.md)；真实AI样本及微信UI未验收。新PR不自动合并，#10继续独立。详见[交接](docs/handoff.md)。
+
 > 本轮合并状态（2026-11-07）：用户明确授权按#11→#12整合后端。#11已合并main，提交172432ab871ef5017587fa8a6dccbe89d57068eb；#12目标已改为main，本说明随其进入主线，最终merge SHA见[PR #12](https://github.com/MIUTLY/lightstep/pull/12)。已验证业务快照07e00747c5ee3071afc39a2c67265dae6294ce15（105项回归及隔离冒烟通过），业务实施bbe6f60。#10保持草稿，微信验收未完成；真实AI样本和微信端显示仍待验收，不因合并视为通过。详见[合并交接](docs/handoff.md)。下文为历史实施记录，旧“未合并/目标feat/task-forest”状态已更新。
 
 > 最新后端任务（2026-11-07）：运行只支持真实AI，已取消离线/领域模板和两层静默降级。独立分支fix/real-ai-task-generation，基于未合并PR #11的039b26f；本修复PR先以feat/task-forest为base。实施提交[bbe6f60b4b9e0a44f5816e5b643b0a3d35e7de62](https://github.com/MIUTLY/lightstep/commit/bbe6f60b4b9e0a44f5816e5b643b0a3d35e7de62)。105项后端回归、隔离冒烟和无密钥真实进程失败流程通过；真实供应商样本和微信显示未验收。未修改前端/计时/回执/手帐。重试、澄清、业务失败HTTP 200语义见[生成协议](docs/ai-task-generation.md)，详情见[最新交接](docs/handoff.md)。后文为历史上下文，旧mock运行约定已失效。

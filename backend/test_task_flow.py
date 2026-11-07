@@ -34,7 +34,7 @@ class TaskFlowTests(unittest.TestCase):
         self.tmp.cleanup()
 
     def post(self, path, **payload):
-        return self.client.post(path, json={"user_id": self.uid, **payload})
+        return self.client.post(path, json={"user_id": self.uid, **({"workflow":"legacy"} if path.endswith("chat") else {}), **payload})
 
     def task(self, state="executing"):
         self.db.clear_active_task(self.uid)
@@ -115,7 +115,7 @@ class TaskFlowTests(unittest.TestCase):
             ("/api/step/resize", {"direction": "TYPO"}),
             ("/api/task/commit", {"agree": "true"}),
             ("/api/task/exit", {"gentle": "false"}),
-            ("/api/chat", {"message": "   "}),
+            ("/api/chat", {"workflow": "legacy", "message": "   "}),
             ("/api/note", {"content": "   "}),
         ]
         for path, payload in invalid:

@@ -37,7 +37,7 @@ class StepPlanTests(unittest.TestCase):
         self.tmp.cleanup()
 
     def post(self, path, **data):
-        result = self.client.post(path, json={"user_id": self.uid, **data})
+        result = self.client.post(path, json={"user_id": self.uid, **({"workflow":"legacy"} if path.endswith("chat") else {}), **data})
         self.assertEqual(result.status_code, 200, result.text)
         return result.json()
 
