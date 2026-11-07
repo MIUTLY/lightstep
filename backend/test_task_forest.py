@@ -81,16 +81,16 @@ class ForestTests(unittest.TestCase):
             c.execute('UPDATE friction SET default_level=1 WHERE user_id=?', (self.uid,))
         with patch.object(self.llm, 'detect_emotion', return_value='焦虑'):
             result = self.begin()
-        self.assertTrue(result['task']['current_step'].startswith('中任务1（本次内容：'))
+        self.assertTrue(result['task']['current_step'].startswith('中任务1\n'))
         self.assertEqual(result['task']['granularity'], 'normal')
         self.assertEqual(result['task']['plan_format'], 'forest_v1')
-        self.assertTrue(self.task()['current_step'].startswith('中任务1（本次内容：'))
+        self.assertTrue(self.task()['current_step'].startswith('中任务1\n'))
         self.assertEqual(self.planning.call_count, 1)
 
     def test_medium_to_heavy_then_medium_then_light_keeps_all_content(self):
         self.begin()
-        self.assertTrue(self.resize('bigger')['current_step'].startswith('重任务1（本次内容：'))
-        self.assertTrue(self.resize('smaller')['current_step'].startswith('中任务1（本次内容：'))
+        self.assertTrue(self.resize('bigger')['current_step'].startswith('重任务1\n'))
+        self.assertTrue(self.resize('smaller')['current_step'].startswith('中任务1\n'))
         self.assertEqual(self.resize('smaller')['current_step'], '轻任务1')
         self.assertEqual(self.done_texts(), [])
         self.assertEqual(len(task_forest.all_leaf_ids(self.plan())), 10)
@@ -98,14 +98,14 @@ class ForestTests(unittest.TestCase):
 
     def test_medium1_done_medium2_to_heavy_exposes_only_remaining(self):
         self.begin(); self.complete()
-        self.assertTrue(self.task()['current_step'].startswith('中任务2（本次内容：'))
+        self.assertTrue(self.task()['current_step'].startswith('中任务2\n'))
         result = self.resize('bigger')
         self.assertEqual(result['parent_id'], None)
         self.assertEqual(result['current_step'], '这一段还剩：轻任务3；轻任务4')
         self.assertNotIn('轻任务1', result['current_step'])
         self.assertEqual(self.done_texts(), ['轻任务1', '轻任务2'])
         self.assertEqual(len(result['remaining_leaf_ids']), 2)
-        self.assertTrue(self.resize('smaller')['current_step'].startswith('中任务2（本次内容：'))
+        self.assertTrue(self.resize('smaller')['current_step'].startswith('中任务2\n'))
 
     def test_medium2_to_light_starts_at_light3(self):
         self.begin(); self.complete()
@@ -131,17 +131,17 @@ class ForestTests(unittest.TestCase):
     def test_completed_parent_children_never_reappear_and_next_tree_is_selected(self):
         self.begin(); self.resize('bigger')
         result = self.complete()
-        self.assertTrue(result['task']['current_step'].startswith('重任务2（本次内容：'))
+        self.assertTrue(result['task']['current_step'].startswith('重任务2\n'))
         self.assertEqual(result['task']['granularity'], 'coarse')
         self.assertEqual(self.done_texts(), ['轻任务1', '轻任务2', '轻任务3', '轻任务4'])
-        self.assertTrue(self.resize('smaller')['current_step'].startswith('中任务3（本次内容：'))
+        self.assertTrue(self.resize('smaller')['current_step'].startswith('中任务3\n'))
         self.assertEqual(self.resize('smaller')['current_step'], '轻任务5')
 
     def test_parent_completion_consumes_only_its_remaining_leaves(self):
         self.begin(); self.resize('smaller'); self.complete()
         self.resize('bigger')
         result = self.complete()
-        self.assertTrue(result['task']['current_step'].startswith('中任务2（本次内容：'))
+        self.assertTrue(result['task']['current_step'].startswith('中任务2\n'))
         self.assertEqual(self.done_texts(), ['轻任务1', '轻任务2'])
         self.assertEqual(result['task']['steps_done'], 2)
 
@@ -185,9 +185,9 @@ class ForestTests(unittest.TestCase):
         self.assertEqual(result['task']['current_step'], '轻任务1')
         self.assertEqual(result['buttons'], ['轻一点', '完成这一步', '重一点', '今天到这吧'])
         result = self.post('chat', message='重一点')
-        self.assertTrue(result['task']['current_step'].startswith('中任务1（本次内容：'))
+        self.assertTrue(result['task']['current_step'].startswith('中任务1\n'))
         result = self.post('chat', message='轻一点是什么意思？')
-        self.assertTrue(result['task']['current_step'].startswith('中任务1（本次内容：'))
+        self.assertTrue(result['task']['current_step'].startswith('中任务1\n'))
 
     def test_resize_before_start_preserves_state_without_appointment(self):
         self.post('chat', message='写论文')

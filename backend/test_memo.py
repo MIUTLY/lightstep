@@ -8,6 +8,7 @@ from uuid import uuid4
 _boot=tempfile.TemporaryDirectory()
 os.environ['LIGHTSTEP_DB']=str(Path(_boot.name)/'boot.db')
 from app import memo, task_forest
+from app.public_text import public_payload
 from app.db import DB
 from app.llm import AIError, Clarification, OpenAICompatLLM
 from app.config import Settings
@@ -66,7 +67,7 @@ class MemoTests(unittest.TestCase):
         with patch('app.memo.today',return_value='2026-11-08'),patch('app.services.db',DB(self.db.path)),TestClient(app) as client:
             for _ in range(2):
                 r=client.post('/api/session/open',json={'user_id':self.uid}).json()
-                self.assertEqual(r['items'],before['items']); self.assertIsNone(r['focus'])
+                self.assertEqual(r['items'],public_payload(before)['items']); self.assertIsNone(r['focus'])
                 self.assertEqual(r['date'],'2026-11-07'); self.assertEqual(r['today_date'],'2026-11-08')
                 self.assertEqual(r['available_dates'],['2026-11-07'])
                 self.assertEqual(r['events'],before['events'])

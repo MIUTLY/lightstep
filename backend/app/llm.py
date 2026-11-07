@@ -8,6 +8,7 @@ AI_DEADLINE = ContextVar("ai_deadline", default=None)
 import httpx
 
 from .config import settings
+from .public_text import display_text
 from .task_forest import validate_blueprint
 from .prompts import EMOTION_PROMPT, DECOMPOSE_PROMPT, REVIEW_PROMPT, PERSONA_SYSTEM, REPLY_PROMPT
 
@@ -131,7 +132,10 @@ class OpenAICompatLLM:
             raise invalid_response() from None
 
     def reply(self, situation, text):
-        return self._chat(PERSONA_SYSTEM, REPLY_PROMPT.format(situation=situation, text=text))
+        reply = display_text(self._chat(PERSONA_SYSTEM, REPLY_PROMPT.format(situation=situation, text=text)))
+        if not reply:
+            raise invalid_response()
+        return reply
 
 
     def _memo_json(self, prompt, data):
@@ -154,6 +158,9 @@ class OpenAICompatLLM:
         if result['kind'] not in ('chat','tasks','answer') or not isinstance(result['reply'],str) or not result['reply'].strip() or len(result['reply'])>2000:
             raise invalid_response()
         if (result['kind']=='answer' and (not isinstance(result['item_id'],str) or result['item_id'] not in {i['id'] for i in pending})) or (result['kind']!='answer' and result['item_id'] is not None):
+            raise invalid_response()
+        result['reply'] = display_text(result['reply'])
+        if not result['reply']:
             raise invalid_response()
         return result
 

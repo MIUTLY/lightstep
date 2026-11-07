@@ -10,6 +10,7 @@ from fastapi.middleware.cors import CORSMiddleware
 from fastapi.staticfiles import StaticFiles
 from fastapi.responses import JSONResponse
 from .llm import AIError
+from .public_text import PublicJSONResponse
 
 from . import services, memo
 from .schemas import MemoCommand, FocusCaptureRequest
@@ -20,7 +21,7 @@ from .schemas import (
     UserId, UserRequest, GenerateTaskRequest, GenerationRetryRequest, GenerationAnswerRequest,
 )
 
-app = FastAPI(title="轻步 LightStep", description="AI 学习搭子「小步」后端")
+app = FastAPI(default_response_class=PublicJSONResponse, title="轻步 LightStep", description="AI 学习搭子「小步」后端")
 
 app.add_middleware(
     CORSMiddleware,
