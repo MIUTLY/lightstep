@@ -56,9 +56,6 @@ class Settings:
     llm_thinking: str = ""
     # 数据
     db_path: str = "lightstep.db"
-    # 自适应粒度阈值（秒）
-    fast_threshold: float = 15.0
-    slow_threshold: float = 90.0
 
     def __post_init__(self):
         if self.llm_timeout <= 0:
@@ -90,8 +87,6 @@ class Settings:
             llm_decompose_max_tokens=int(os.getenv("LLM_DECOMPOSE_MAX_TOKENS", "4096")),
             llm_thinking=os.getenv("LLM_THINKING", "").strip().lower(),
             db_path=_resolve_db_path(os.getenv("LIGHTSTEP_DB", "lightstep.db")),
-            fast_threshold=float(os.getenv("FAST_THRESHOLD", "15")),
-            slow_threshold=float(os.getenv("SLOW_THRESHOLD", "90")),
         )
 
 

@@ -37,16 +37,8 @@ def ask_when() -> str:
     return "什么时候开始？"
 
 
-def scheduled(label: str) -> str:
-    return f"行，约在{label}。留在对话页时会轻轻提醒，离开后再回来也可以。"
-
-
-def ask_delay() -> str:
-    return "想约5分钟后，还是10分钟后？"
-
-
 def commit_prompt() -> str:
-    return "就做5分钟。5分钟到了想走随时走，行不行？"
+    return "准备好了就开始，想停时随时停。行不行？"
 
 
 def commit_agree() -> str:
@@ -55,13 +47,6 @@ def commit_agree() -> str:
 
 def commit_disagree() -> str:
     return "好，那再想想。随时都行。"
-
-
-def step_next_aside(direction: str) -> str:
-    """下一步的温柔旁白。up=加量（状态在线），down=拆细（有点卡）。"""
-    if direction == "up":
-        return _pick(["状态不错，加点量。", "挺顺的，往前一点。", "在线，再加一小步。"])
-    return _pick(["没事，慢一点，拆细点。", "这步有点重，拆开它。", "不赶，我们做小一点。"])
 
 
 def all_done(title: str, steps_done: int) -> str:
@@ -112,7 +97,7 @@ def afk_ok() -> str:
     return "行，去刷吧。我不催。"
 
 
-def afk_due() -> str:
+def available() -> str:
     return "我在这儿，需要了叫我。"
 
 

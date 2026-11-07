@@ -44,9 +44,9 @@ def main():
     show("打开", client.post("/api/session/open", json={"user_id": uid}))
     show("想写论文", client.post("/api/chat", json={"user_id": uid, "workflow": "legacy", "message": "好，那我试试写课程论文"}))
     show("现在开始", client.post("/api/task/choose_time", json={"user_id": uid, "when": "now"}))
-    show("同意5分钟", client.post("/api/task/commit", json={"user_id": uid, "agree": True}))
-    show("完成一步(快)", client.post("/api/step/complete", json={"user_id": uid, "duration_ms": 5000}))
-    show("完成一步(快)", client.post("/api/step/complete", json={"user_id": uid, "duration_ms": 4000}))
+    show("确认开始", client.post("/api/task/commit", json={"user_id": uid, "agree": True}))
+    show("手动完成一步", client.post("/api/step/complete", json={"user_id": uid}))
+    show("手动完成一步", client.post("/api/step/complete", json={"user_id": uid}))
     show("温柔收尾", client.post("/api/task/exit", json={"user_id": uid, "gentle": True}))
 
     # 手帐转为客户端本地存储，旧接口不再接收留言。
@@ -76,7 +76,7 @@ def main():
     show("写日记", client.post("/api/chat", json={"user_id": uid3, "workflow": "legacy", "message": "写日记"}))
     show("现在开始", client.post("/api/task/choose_time", json={"user_id": uid3, "when": "now"}))
     show("同意", client.post("/api/task/commit", json={"user_id": uid3, "agree": True}))
-    show("完成一步", client.post("/api/step/complete", json={"user_id": uid3, "duration_ms": 30000}))
+    show("完成一步", client.post("/api/step/complete", json={"user_id": uid3}))
 
     # 模拟昨天关掉应用：把 last_seen 改成昨天
     yesterday = (datetime.now().date() - timedelta(days=1)).isoformat()
@@ -84,9 +84,11 @@ def main():
         c.execute("UPDATE users SET last_seen=? WHERE user_id=?", (yesterday, uid3))
     print("\n[已把 last_seen 改成昨天]")
 
+    before = db.get_active_task(uid3)
     h = show("第二天打开", client.post("/api/session/open", json={"user_id": uid3}))
     assert "接着" in h.get("reply", ""), "应出现跨天交接提示"
-    show("接着做", client.post("/api/handoff/resume", json={"user_id": uid3}))
+    assert h["state"] == "executing"
+    assert db.get_active_task(uid3) == before, "跨天保留当前任务及所有进度"
 
     print("\n✅ 全部 smoke test 通过")
 

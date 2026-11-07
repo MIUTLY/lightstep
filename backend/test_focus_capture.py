@@ -120,11 +120,21 @@ class CaptureTests(unittest.TestCase):
         self.op('end',session_id=self.sid)
         self.assertFalse(self.state()['navigation']['sidebar_locked'])
         self.assertFalse(self.state()['items'][0]['completed'])
+    def test_completed_task_is_not_available_as_capture_anchor(self):
+        while self.state()['focus']:
+            f=self.state()['focus'];self.op('complete',session_id=self.sid,step_id=f['step']['step_id'])
+        r=self.op('select',item_id=self.state()['items'][0]['id']);self.sid=r['focus']['session_id']
+        with patch.object(self.ai,'extract_focus_tasks',return_value={'tasks':['打电话'],'placement':{'kind':'after_named','target':'写作业'}}):
+            r=self.capture()
+        self.assertEqual(r['operation']['status'],'needs_clarification')
+        self.assertEqual(r['capture']['choices'],[])
+        self.assertNotIn('写作业',self.titles())
+
     def test_whole_forest_completion_unlocks_navigation(self):
         while self.state()['focus']:
             f=self.state()['focus'];self.op('complete',session_id=self.sid,step_id=f['step']['step_id'])
         self.assertFalse(self.state()['navigation']['sidebar_locked'])
-        self.assertTrue(self.state()['items'][0]['completed'])
+        self.assertNotIn(self.before['active']['item_id'], [i['id'] for i in self.state()['items']])
 
     def test_database_commit_failure_rolls_back_and_retry_saves_once(self):
         original=self.db._conn

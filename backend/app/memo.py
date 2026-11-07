@@ -18,14 +18,39 @@ def empty():
     return {'revision': 0, 'days': {}, 'active': None, 'events': []}
 
 
+def retain_unfinished(state):
+    """Upgrade old completed rows to minimal receipt/journal facts, without a task forest."""
+    for day in state['days'].values():
+        finished = day.setdefault('finished', [])
+        known = {item['id'] for item in finished}
+        for item in day['items']:
+            if item['completed'] and item['id'] not in known:
+                finished.append({k: item.get(k) for k in ('id', 'title', 'scope')})
+                known.add(item['id'])
+        day['items'] = [item for item in day['items'] if not item['completed']]
+    return state
+
+
+def day_completed(day):
+    # An untouched empty day is not a completed day.
+    return bool(day.get('finished')) and not day['items']
+
+
 def load(db, uid):
     with db._conn() as c:
         row = c.execute('SELECT data FROM memo_state WHERE user_id=?', (uid,)).fetchone()
-        return json.loads(row[0]) if row else empty()
+        return retain_unfinished(json.loads(row[0])) if row else empty()
 
 
 def view(state, date=None):
-    date = date or today()
+    state = retain_unfinished(copy.deepcopy(state))
+    current_date = today()
+    available_dates = sorted((d for d, day in state['days'].items() if day['items']), reverse=True)
+    if date is None:
+        # Keep the focused list visible across midnight; otherwise reopen the latest saved list.
+        date = (find(state, state['active']['item_id'])[0] if state['active'] else
+                current_date if current_date in available_dates else
+                available_dates[0] if available_dates else current_date)
     day = state['days'].get(date, {'items': []})
     items = []
     for item in day['items']:
@@ -42,8 +67,10 @@ def view(state, date=None):
         active_item = dict(active, title=i['title'], scope=i['scope'], progress=progress(i['plan']), step=task_forest.view(i['plan']))
     return {'navigation': {'sidebar_locked': bool(active), 'can_collapse_focus': not bool(active)},
             'state': 'executing' if active else 'memo', 'revision': state['revision'], 'date': date,
+            'today_date': current_date, 'available_dates': available_dates,
+            'today_all_completed': day_completed(state['days'].get(current_date, {'items':[]})),
             'items': items, 'focus': active_item,
-            'all_completed': bool(items) and all(i['completed'] for i in items),
+            'all_completed': day_completed(day),
             'suggested_item_id': first['id'] if first else None,
             'reply': (f"我们是否从【{first['title']}】开始？" if first and not active else ''),
             'events': [e for e in state['events'] if not e['acknowledged']]}
@@ -81,15 +108,16 @@ def end_focus(state, date, item, completed):
     event(state, 'receipt', item_id=item['id'], title=item['title'], scope=item['scope'], date=date,
           session_id=active['session_id'], outcome='completed' if completed else 'interrupted', **facts)
     state['active'] = None
+    retain_unfinished(state)
     day = state['days'][date]
-    if day['items'] and all(i['completed'] for i in day['items']):
+    if day_completed(day):
         if day.get('journal_event_id'):
             prior = next(e for e in state['events'] if e['id']==day['journal_event_id'])
-            prior.update(eligible=True, acknowledged=False, revision=state['revision']+1, item_ids=[i['id'] for i in day['items']],
-                         tasks=[{'id':i['id'], 'title':i['title'], 'scope':i['scope']} for i in day['items']])
+            prior.update(eligible=True, acknowledged=False, revision=state['revision']+1, item_ids=[i['id'] for i in day['finished']],
+                         tasks=[{'id':i['id'], 'title':i['title'], 'scope':i['scope']} for i in day['finished']])
             return
-        event(state, 'daily_journal', eligible=True, date=date, item_ids=[i['id'] for i in day['items']],
-              tasks=[{'id': i['id'], 'title': i['title'], 'scope': i['scope']} for i in day['items']])
+        event(state, 'daily_journal', eligible=True, date=date, item_ids=[i['id'] for i in day['finished']],
+              tasks=[{'id': i['id'], 'title': i['title'], 'scope': i['scope']} for i in day['finished']])
         day['journal_event_id'] = state['events'][-1]['id']
 
 
@@ -104,7 +132,7 @@ def execute(db, ai, uid, request_id, command):
         if previous and previous['payload'] != payload:
             raise HTTPException(409, 'request_id已用于不同操作。')
         row = c.execute('SELECT data FROM memo_state WHERE user_id=?', (uid,)).fetchone()
-        state = json.loads(row[0]) if row else empty()
+        state = retain_unfinished(json.loads(row[0])) if row else empty()
         if command['action']=='focus_capture':
             from . import focus_capture
             focus_capture.prepare(c,uid,request_id,command,state)
@@ -120,7 +148,7 @@ def execute(db, ai, uid, request_id, command):
                 return cached
         c.execute('INSERT OR REPLACE INTO memo_operations VALUES(?,?,?,?,NULL)', (uid,request_id,payload,attempt))
         row = c.execute('SELECT data FROM memo_state WHERE user_id=?', (uid,)).fetchone()
-        state = json.loads(row[0]) if row else empty()
+        state = retain_unfinished(json.loads(row[0])) if row else empty()
     revision = state['revision']
     original = copy.deepcopy(state)
     try:
@@ -146,7 +174,7 @@ def execute(db, ai, uid, request_id, command):
         c.execute('BEGIN IMMEDIATE')
         op = c.execute('SELECT attempt FROM memo_operations WHERE user_id=? AND request_id=?', (uid,request_id)).fetchone()
         row = c.execute('SELECT data FROM memo_state WHERE user_id=?', (uid,)).fetchone()
-        current = json.loads(row[0]) if row else empty()
+        current = retain_unfinished(json.loads(row[0])) if row else empty()
         if not op or op[0] != attempt or current['revision'] != revision:
             raise HTTPException(409, '任务清单或进度已变化，请刷新后重试，已有数据已保留。')
         if command['action']=='select' and state['active'] and c.execute('SELECT 1 FROM active_task WHERE user_id=?',(uid,)).fetchone():
@@ -175,7 +203,7 @@ def apply(state, ai, cmd):
         day = state['days'].get(cmd['date'], {'items':[]})
         ids = cmd['item_ids']
         if len(ids) != len(set(ids)) or set(ids) != {i['id'] for i in day['items']}:
-            raise HTTPException(422, '排序必须包含当天每项任务且不能重复。')
+            raise HTTPException(422, '排序必须包含该日每项未完成任务且不能重复。')
         if cmd['revision'] != state['revision']:
             raise HTTPException(409, '清单版本已变化，请刷新。')
         mapping = {i['id']:i for i in day['items']}

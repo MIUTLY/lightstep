@@ -80,7 +80,8 @@ class EndingIntentTests(unittest.TestCase):
                 with self.subTest(state=state, message=message):
                     self.start(state)
                     self.db.add_note(self.uid, "取快递")
-                    self.db.add_reminder(self.uid, "喝水", "2099-01-01T00:00:00")
+                    with self.db._conn() as c:
+                        c.execute("INSERT INTO reminders (user_id,label,due_at) VALUES (?, ?, ?)", (self.uid, "喝水", "2099-01-01T00:00:00"))
                     before = self.snapshot()
                     data = self.post("/api/chat", message=message)
                     self.assertEqual(data["state"], "idle")

@@ -1,15 +1,15 @@
 """SQLite 存储层（stdlib sqlite3，无 ORM 依赖）。
 
 三层记忆模型：
-  - 任务级（active_task / day_log）：当天清空
+  - 任务级（active_task / day_log）：跨天保留
   - 偏好级（preferences / friction / handoff）：长期沉淀，跨天保留
-  - 便签与提醒（notes / reminders）；回执与私人手帐仅存客户端
+  - 便签（notes）；历史提醒表只保留兼容数据，不创建或投递提醒；回执与私人手帐仅存客户端
 """
 import json
 import sqlite3
 import uuid
 from contextlib import contextmanager
-from datetime import datetime, timedelta, timezone
+from datetime import datetime
 
 from .config import settings
 from .decompose import domain_of
@@ -120,9 +120,6 @@ def today_str() -> str:
     return datetime.now().strftime("%Y-%m-%d")
 
 
-def utc_now() -> datetime:
-    return datetime.now(timezone.utc)
-
 
 class DB:
     def __init__(self, path: str | None = None):
@@ -154,19 +151,15 @@ class DB:
             return dict(row)
 
     def _rollover(self, user_id: str) -> bool:
-        """跨天：先把"上次写到哪"存成交接，再清掉当天任务。返回是否跨天。"""
+        """仅判断日期变化，不清理任务、进度或完成记录。"""
         user = self.get_or_create_user(user_id)
         today = today_str()
         if not user["last_seen"] or user["last_seen"] == today:
             return False
-        task = self.get_active_task(user_id)
-        if task and task["steps_done"] > 0:
-            self._save_handoff_from_task(user_id, task)
-        self.clear_active_task(user_id)
         return True
 
     def ensure_user(self, user_id: str) -> dict:
-        """确保用户存在 + 做跨天清理，但不增加 open_count（聊天不应算一次打开）。"""
+        """确保用户存在并更新访问日期，但不增加 open_count（聊天不应算一次打开）。"""
         self._rollover(user_id)
         with self._conn() as c:
             c.execute("UPDATE users SET last_seen=? WHERE user_id=?", (today_str(), user_id))
@@ -333,39 +326,6 @@ class DB:
                     (levels_json, level, current_idx, task["steps_done"] + int(completed), now_iso(), task["user_id"]))
         return True
 
-    def schedule_task_start(self, user_id: str, minutes: int) -> bool:
-        if minutes not in (5, 10):
-            raise ValueError("start delay must be 5 or 10 minutes")
-        with self._conn() as c:
-            c.execute("BEGIN IMMEDIATE")
-            task = c.execute("SELECT state FROM active_task WHERE user_id=?", (user_id,)).fetchone()
-            if not task or task["state"] != "ready":
-                return False
-            due = (utc_now() + timedelta(minutes=minutes)).isoformat(timespec="seconds")
-            c.execute(
-                "INSERT INTO task_start_reminders (user_id, due_at, notified) VALUES (?, ?, 0) "
-                "ON CONFLICT(user_id) DO UPDATE SET due_at=excluded.due_at, notified=0", (user_id, due))
-        return True
-
-    def get_start_due_at(self, user_id: str) -> str | None:
-        with self._conn() as c:
-            row = c.execute("SELECT due_at FROM task_start_reminders WHERE user_id=? AND notified=0", (user_id,)).fetchone()
-        return row["due_at"] if row else None
-
-    def take_due_start_reminder(self, user_id: str) -> list[str]:
-        # 取出并标记在同一事务，避免并行打开/轮询重复返回同一预约。
-        with self._conn() as c:
-            c.execute("BEGIN IMMEDIATE")
-            row = c.execute(
-                "SELECT t.title FROM task_start_reminders r JOIN active_task t ON t.user_id=r.user_id "
-                "WHERE r.user_id=? AND r.notified=0 AND r.due_at<=? AND t.state='ready'",
-                (user_id, utc_now().isoformat(timespec="seconds")),
-            ).fetchone()
-            if not row:
-                return []
-            c.execute("UPDATE task_start_reminders SET notified=1 WHERE user_id=?", (user_id,))
-        return [f"之前约好开始「{row['title']}」。想开始时点「现在开始」，不急。"]
-
     # ---------- 当日记录 ----------
 
     def record_step_done(self, user_id: str, title: str) -> None:
@@ -411,20 +371,6 @@ class DB:
     def mark_notes_recalled(self, user_id: str) -> None:
         with self._conn() as c:
             c.execute("UPDATE notes SET recalled=1 WHERE user_id=? AND recalled=0", (user_id,))
-
-    def add_reminder(self, user_id: str, label: str, due_at: str) -> None:
-        with self._conn() as c:
-            c.execute("INSERT INTO reminders (user_id, label, due_at, created_at) VALUES (?, ?, ?, ?)",
-                      (user_id, label, due_at, now_iso()))
-
-    def due_reminders(self, user_id: str) -> list[str]:
-        with self._conn() as c:
-            rows = c.execute(
-                "SELECT label FROM reminders WHERE user_id=? AND done=0 AND due_at<=? "
-                "AND label NOT LIKE '该开始「%」啦' ORDER BY due_at",
-                (user_id, now_iso()),
-            ).fetchall()
-        return [r["label"] for r in rows]
 
     # ---------- 摩擦地图 ----------
 
