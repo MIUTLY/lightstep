@@ -13,7 +13,7 @@ from .config import settings
 from .schemas import (
     ChatRequest, ChooseTimeRequest, CommitRequest, ExitRequest,
     NoteRequest, StepCompleteRequest, StepResizeRequest,
-    UserRequest,
+    UserId, UserRequest,
 )
 
 app = FastAPI(title="轻步 LightStep", description="AI 学习搭子「小步」后端")
@@ -94,17 +94,17 @@ def journal_retired():
 
 
 @app.get("/api/session/state")
-def session_state(user_id: str):
+def session_state(user_id: UserId):
     return services.get_state(user_id)
 
 
 @app.get("/api/history")
-def history(user_id: str):
+def history(user_id: UserId):
     return services.get_history(user_id)
 
 
 @app.get("/api/daily/summary")
-def daily_summary(user_id: str):
+def daily_summary(user_id: UserId):
     return services.get_daily_summary(user_id)
 
 

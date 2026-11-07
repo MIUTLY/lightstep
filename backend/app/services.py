@@ -9,6 +9,8 @@
 import json
 from datetime import datetime, timedelta
 
+from fastapi import HTTPException
+
 from . import persona
 from .db import db
 from .decompose import domain_of
@@ -23,7 +25,7 @@ _GOAL_INTENT = ["想", "要", "得", "该", "准备", "打算", "试试", "试�
 _GOAL_VERBS = ["刷题", "写", "背", "读", "看", "学", "复习", "整理", "收拾", "跑步", "健身",
                "运动", "练", "做题", "改", "画", "做"]
 _EXIT = ["不做了", "今天到这", "到此", "结束", "收工", "够了", "温柔收尾", "不想做了", "先到这"]
-_TOO_BIG = ["太多", "太重", "太大", "好难", "太难", "做不完", "好多", "缩小", "拆细", "太累", "有点难"]
+_TOO_BIG = ["太多", "太重", "太大", "好难", "太难", "做不完", "好多", "缩小", "拆细", "拆小", "太累", "有点难"]
 _TOO_EASY = ["太简单", "太容易", "加量", "加一点", "不够", "太少", "放大", "太轻松"]
 _NOTE = ["记一下", "记个", "记得", "别忘", "提醒我", "备忘", "记下", "帮我记"]
 _AFK = ["手机", "视频", "打游戏", "玩游戏", "抖音", "短视频", "刷", "走神", "发呆", "摸鱼", "躺一会儿"]
@@ -43,6 +45,46 @@ _LEAD_FILLERS = sorted(
 
 def _has_any(text: str, words) -> bool:
     return any(w in text for w in words)
+
+
+def _is_question(text: str) -> bool:
+    return _has_any(text, ("怎么", "怎样", "如何", "为什么", "什么", "是否", "能否", "能不能", "可不可以", "吗", "?", "？"))
+
+
+def _command_text(text: str) -> str:
+    command = text.strip()
+    for prefix in ("我想", "我要", "请", "那就", "那"):
+        if command.startswith(prefix):
+            command = command[len(prefix):].lstrip("，, ")
+    return command
+
+
+def _is_switch_command(text: str) -> bool:
+    # 换任务要有明确的命令开头；“换一个方法”不能误删任务。
+    command = _command_text(text)
+    if command.startswith(("换一个方法", "换一个说法", "换个方法", "换个说法")):
+        return False
+    return any(command.startswith(word) for word in _SWITCH)
+
+
+def _require_task_state(user_id: str, allowed: tuple[str, ...]) -> dict | None:
+    # 先只读校验，非法动作不创建用户、不清理任务、不改变偏好。
+    task = db.get_active_task(user_id)
+    if not task or task["state"] not in allowed:
+        raise HTTPException(status_code=409, detail={
+            "code": "INVALID_TASK_STATE",
+            "message": "当前状态不能执行这个动作，请刷新任务后再试。",
+        })
+    # 合法动作仍沿用原有跨天处理；不在本轮重新定义数据保留规则。
+    db.ensure_user(user_id)
+    return db.get_active_task(user_id)
+
+
+def _validate_choice(value, allowed: tuple[str, ...]) -> None:
+    if value not in allowed:
+        raise HTTPException(status_code=422, detail={
+            "code": "INVALID_TASK_PARAMETER", "message": "任务操作参数无效。",
+        })
 
 
 def _levels_of(task: dict) -> dict:
@@ -182,8 +224,13 @@ def handle_chat(user_id: str, message: str) -> Reply:
 def _chat_reply(user_id: str, text: str) -> Reply:
     task = db.get_active_task(user_id)
 
+    resize_request = _has_any(text, ("帮我拆小", "帮我拆细", "能拆小", "能拆细", "可以拆小",
+                                    "可以拆细", "能不能拆小", "能不能拆细", "帮我加量"))
+    if task and _is_question(text) and not resize_request:
+        return _answer_current_step(task, text)
+
     # 1. 接着上次（跨天交接）
-    if _has_any(text, _CONTINUE) and db.get_handoff(user_id):
+    if not task and _has_any(text, _CONTINUE) and db.get_handoff(user_id):
         return resume_handoff(user_id)
 
     # 2. 温柔收尾
@@ -199,7 +246,7 @@ def _chat_reply(user_id: str, text: str) -> Reply:
         return _rest_day(user_id)
 
     # 5. 换件事
-    if _has_any(text, _SWITCH):
+    if _is_switch_command(text):
         return _switch_task(user_id, text)
 
     # 6. 太重 / 太简单（有任务时）
@@ -209,7 +256,7 @@ def _chat_reply(user_id: str, text: str) -> Reply:
         return handle_resize(user_id, "bigger")
 
     # 7. 想做事（新任务 / 替换当前）
-    if _is_goal(text):
+    if not task and _is_goal(text):
         return _create_task(user_id, text)
 
     # 8. 发呆 / 摸鱼
@@ -230,6 +277,12 @@ def _chat_reply(user_id: str, text: str) -> Reply:
         return Reply(reply=persona.remind_step(_current_step_text(task)),
                      state=task["state"], task=_task_view(task), buttons=_buttons_for(task))
     return Reply(reply=persona.idle_reply(), state="idle")
+
+
+def _answer_current_step(task: dict, text: str) -> Reply:
+    answer = llm.reply(_describe_state(task), text)
+    return Reply(reply=answer or persona.remind_step(_current_step_text(task)),
+                 state=task["state"], task=_task_view(task), buttons=_buttons_for(task))
 
 
 # ---------- 任务流程 ----------
@@ -261,8 +314,8 @@ def _create_task(user_id: str, text: str) -> Reply:
 
 
 def handle_choose_time(user_id: str, when: str) -> Reply:
-    db.ensure_user(user_id)
-    task = db.get_active_task(user_id)
+    _validate_choice(when, ("now", "later", "not_today"))
+    task = _require_task_state(user_id, ("ready",))
     if not task:
         return Reply(reply=persona.afk_due(), state="idle")
     if when == "now":
@@ -280,8 +333,9 @@ def handle_choose_time(user_id: str, when: str) -> Reply:
 
 
 def handle_commit(user_id: str, agree: bool) -> Reply:
-    db.ensure_user(user_id)
-    task = db.get_active_task(user_id)
+    if not isinstance(agree, bool):
+        raise HTTPException(status_code=422, detail="agree必须为布尔值。")
+    task = _require_task_state(user_id, ("committing",))
     if not task:
         return Reply(reply=persona.afk_due(), state="idle")
     if agree:
@@ -291,13 +345,14 @@ def handle_commit(user_id: str, agree: bool) -> Reply:
                      task=_task_view(db.get_active_task(user_id)),
                      buttons=["完成这一步", "太重了", "今天到这吧"])
     db.update_active_task(user_id, state="ready")
-    return Reply(reply=persona.commit_disagree(), state="ready", task=_task_view(task),
+    return Reply(reply=persona.commit_disagree(), state="ready", task=_task_view(db.get_active_task(user_id)),
                  buttons=["现在开始", "待会儿", "今天不做"])
 
 
 def handle_step_complete(user_id: str, duration_ms: int) -> Reply:
-    db.ensure_user(user_id)
-    task = db.get_active_task(user_id)
+    if type(duration_ms) is not int or duration_ms < 0:
+        raise HTTPException(status_code=422, detail="duration_ms必须为非负整数。")
+    task = _require_task_state(user_id, ("executing",))
     if not task:
         return Reply(reply=persona.afk_due(), state="idle")
 
@@ -349,8 +404,8 @@ def _complete(user_id: str, task: dict, steps_done: int) -> Reply:
 
 
 def handle_resize(user_id: str, direction: str) -> Reply:
-    db.ensure_user(user_id)
-    task = db.get_active_task(user_id)
+    _validate_choice(direction, ("smaller", "bigger"))
+    task = _require_task_state(user_id, ("ready", "committing", "executing"))
     if not task:
         return Reply(reply=persona.afk_due(), state="idle")
 
@@ -364,16 +419,16 @@ def handle_resize(user_id: str, direction: str) -> Reply:
     new_total = len(levels.get(level_name(new_level), []))
 
     if new_level == task["level"]:
-        return Reply(reply=persona.boundary(gdir), state="executing", task=_task_view(task),
-                     buttons=["完成这一步", "太重了", "今天到这吧"])
+        return Reply(reply=persona.boundary(gdir), state=task["state"], task=_task_view(task),
+                     buttons=_buttons_for(task))
 
     new_idx = map_progress(task["current_idx"], cur_total, new_total)
     db.update_active_task(user_id, level=new_level, current_idx=new_idx)
     task2 = db.get_active_task(user_id)
     step = _current_step_text(task2)
     reply = f"{persona.shrink() if direction == 'smaller' else persona.grow()} 现在这一步：「{step}」"
-    return Reply(reply=reply, state="executing", task=_task_view(task2),
-                 buttons=["完成这一步", "太重了", "今天到这吧"])
+    return Reply(reply=reply, state=task2["state"], task=_task_view(task2),
+                 buttons=_buttons_for(task2))
 
 
 def _gentle_end(user_id: str, task: dict) -> Reply:
@@ -433,12 +488,17 @@ def _rest_day(user_id: str) -> Reply:
 
 def _switch_task(user_id: str, text: str) -> Reply:
     old = db.get_active_task(user_id)
-    new_title = _extract_title(text)
-    if old:
-        db.clear_active_task(user_id)
+    command = _command_text(text)
+    for word in sorted(_SWITCH, key=len, reverse=True):
+        if command.startswith(word):
+            command = command[len(word):]
+            break
+    new_title = _extract_title(command)
     if new_title == "这件事":
-        return Reply(reply=persona.switch_ask(), state="idle")
-    return _create_task(user_id, text)
+        return Reply(reply=persona.switch_ask(), state=old["state"] if old else "idle",
+                     task=_task_view(old) if old else None, buttons=_buttons_for(old))
+    # 新任务成功生成后再替换，不能在模型调用之前先删除旧任务。
+    return _create_task(user_id, new_title)
 
 
 # ---------- 跨天交接 ----------

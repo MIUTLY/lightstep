@@ -27,3 +27,7 @@
 - 回执图片和私人留言仅在客户端保存，不恢复服务端 journal 写入或自动生成。
 - 原有 journal 表若存在不擅自删除；跨天、历史、退出的冲突仍需明确决定。
 - 后端边界变更运行 test_storage_boundary.py；本地手帐变更运行 node --test test_local_journal.cjs。
+
+## 每轮修改说明
+- 按用户要求，每轮完成后必须说明：改了什么、依据什么需求或复现问题、为什么这样改、如何验证以及未完成项。
+- 修改依据与验收结果同步写入 docs/handoff.md；需要详细说明时新增 docs/change-reports/ 下的记录。

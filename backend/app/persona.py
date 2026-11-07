@@ -162,4 +162,4 @@ def remind_step(step: str) -> str:
 
 
 def switch_ask() -> str:
-    return "好，想换成什么？"
+    return "想换成什么？说“换成……”就行。"
