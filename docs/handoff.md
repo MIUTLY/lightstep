@@ -1,3 +1,82 @@
+# PR #8 合并授权更新
+
+2026-11-07（北京时间）：用户在知悉未完成项后明确要求合并 [PR #8](https://github.com/MIUTLY/lightstep/pull/8)，本次按此指令转为正式 PR 并合入 main；下文上一轮“保持草稿、不合并”为当时范围，已由此指令更新。没有补做或虚构队员评审、CI、微信编译和真机验收。
+
+合并前已验证的业务代码提交为 `20b3222062cf3e2eb8fee0c9747e8a03b87406ee`，上一轮交接提交为 `030487a8bf37b6fb9caaae096b210af89a39d4ad`；本次仅追加状态记录，58项后端、28项Node与mock冒烟的结果仍来自该轮。微信编译/真机、提醒可靠送达、勿扰规则及网页持续轮询继续保留为未完成项。最终合并状态和合并提交编号见 [PR #8](https://github.com/MIUTLY/lightstep/pull/8)。
+
+---
+
+# 最新交接：PR #8 预约前台轮询修复与回归
+
+日期：2026-11-07（北京时间）。用户本轮授权继续完善现有PR #8，补测试、修复已复现问题、更新原PR与交接；不合并。分支：fix/start-reminder-options。
+
+## 远端基线与本轮提交
+
+- 本轮开始重新核对：#4/#5/#7已合入main，重复#6已关闭；#8为open/draft，base为main。下方历史记录中的“前置未合并”已过时。
+- PR #8起始head为d67bc71393ad92033ace3490166966748e6cfafc。通过GitHub连接读取固定SHA的文本源码并逐Git blob哈希核验，在隔离工作区验证；没有覆盖原上传ZIP工作区。
+- 本轮实施提交：[20b3222062cf3e2eb8fee0c9747e8a03b87406ee](https://github.com/MIUTLY/lightstep/commit/20b3222062cf3e2eb8fee0c9747e8a03b87406ee)。交接文档补充提交见[PR #8提交列表](https://github.com/MIUTLY/lightstep/pull/8/commits)。本轮保持草稿，不合并、不部署。
+
+## 修改文件、依据与结果
+
+- `backend/app/db.py`、`schemas.py`：start_due_at仅表示待提醒预约。取出标记后返回null，停止客户端无效轮询；已标记行保留，改约仍可重新启用。依据是新增两项HTTP回归在旧代码失败；无数据库结构迁移或旧数据删除。
+- `frontend/utils/startReminderPoller.js`：页面可见与存在待提醒预约分开控制；无预约、消费或取消时停表，当前页预约后重新启动；保持不重叠请求，隐藏后旧凭证无效，再显示等待旧请求结束后及时检查。
+- `frontend/store/session.js`：任务响应后重新协调计时器；旧状态查询不覆盖新操作/更新查询；轮询和查询校验请求身份。旧轮询不能恢复已开始、结束或改约前的状态。
+- `frontend/pages/chat/chat.vue`：递增生命周期版本，防止旧onShow完成时启动新一轮页面副作用。隐藏/卸载继续停止轮询和无操作召回。
+- `frontend/api/index.js`：预约后台检查使用silent请求，断网时不反复弹toast；普通用户操作错误反馈不变。
+- `backend/test_start_reminders.py`：新增消费后pending字段、状态读取、重启与改约，以及open消费后的HTTP回归。
+- `frontend/tests/startReminderPoller.test.mjs`、`startReminderSession.test.mjs`、`chatReminderLifecycle.test.mjs`、`helpers/runtime.mjs`：新增22项行为回归，加载实际模块/页面script，替换平台边界并控制慢网和计时器。
+- 同步`docs/api.md`、`frontend/README.md`、`CODEX_HANDOFF.md`、本文及[详细报告](change-reports/2026-11-07-start-reminder-polling.md)。保留回执/手帐业务源码，不混入迁移。
+
+## 验证命令与结果
+
+仓库根目录：
+
+```bash
+node --experimental-vm-modules --test --test-isolation=none frontend/tests/*.test.mjs backend/test_local_journal.cjs
+git diff --check
+```
+
+backend目录，LLM_PROVIDER=mock、LIGHTSTEP_DB指向独立临时数据库：
+
+```bash
+python -m unittest -v test_start_reminders.py test_ending_intent.py test_step_plan.py test_task_flow.py test_llm.py test_storage_boundary.py
+python smoke_test.py
+```
+
+- Node 28项通过：新增预约22项 + 既有步骤身份/网页本地手帐6项。新增21项首次在旧业务源码运行时有11项失败，修复后通过；之后补充了身份切换的第22项。
+- Python 58项通过：原56项 + 本轮2项；新2项在旧代码均失败。全部使用临时SQLite、mock，无外部模型调用。
+- 独立临时SQLite上的mock smoke通过；所改JS及chat.vue script语法、diff空白检查通过。
+- 当前执行环境的TestClient跨线程selector需定期唤醒；首次完整检查中的API-only子进程未适配而超时。统一使用仓库外`sitecustomize`包装后重跑整套通过。包装只配置TestClient loop_factory，不改变路由、模型或测试断言，具体命令见详细报告。
+- VM测试用模拟Vue/uni边界，不等于Vue模板/WXSS编译或微信运行时验证。本轮未做HBuilderX编译、微信工具、真机、实际5/10分钟墙钟等待、真实模型和线上验收。
+
+## 未解决问题与下一步
+
+1. 提醒仍为服务端取出时标记、至多返回一次；网络丢包或客户端丢弃旧响应时可能未展示。需要产品决定确认/重投协议，不能宣称可靠送达或exactly-once展示。
+2. 勿扰现有规则针对无操作召回，是否屏蔽预约仍待定；本轮不选择规则。
+3. 网页调试页仍未持续轮询，只在重新打开时检查；本轮主要交付uni-app生命周期回归。
+4. 微信编译/真机验收待补；前端本地回执/手帐迁移另开任务；轻承诺续时、全局写幂等/版本、模型总超时预算等沿用原待办。
+
+以下为历史交接快照，其PR状态和验证数字只代表当时；当前以本节及远端为准。
+
+---
+
+# 最新交接：转交Codex，预约功能以草稿保存
+
+日期：2026-11-07（北京时间）。接手请先阅读根目录[CODEX_HANDOFF.md](../CODEX_HANDOFF.md)，其中包含全部已改内容、修改依据、PR关系、剩余任务、验证和用户要求。
+
+[草稿PR #8](https://github.com/MIUTLY/lightstep/pull/8)；初始保存提交[76c1187](https://github.com/MIUTLY/lightstep/commit/76c118710fffa511add8113513338b700ebad552)。当前功能仍在进行中。
+
+- 当前分支fix/start-reminder-options，基于PR #7的716057a；该PR尚未合并。
+- 已写5/10分钟预约、改约/取消/重启恢复/单次取出、UTC到期时间与新接口；uni-app按钮和前台检查也已接线。依据是策划的5/10分钟选择，以及旧半小时预约重复/遗留的问题。
+- 用户中途要求转交代码工作，因此本轮保存为草稿，不继续扩展功能或宣称完成微信验收。
+- 56项后端测试、6项既有Node测试、JS及chat.vue script语法、独立临时数据库mock冒烟通过；新增预约前端行为测试仍缺。
+- 接手重点：预约消费后停止无效轮询、慢网/隐藏/操作竞争、提醒展示确认、勿扰策略、微信编译与真机；随后完成前端本地手帐迁移等。
+- 发现#6与#7同head、不同base；不要当成独立功能重复合并。当前main仅包含#1/#2/#3，#4/#5/#7及本轮均未合并。
+
+以下为历史记录；其中“下一步”与旧缺陷状态可能已被后续轮次更新，以CODEX_HANDOFF.md及最新远端为准。
+
+---
+
 # 最新交接：自然收尾与疲惫反馈
 
 日期：2026-11-07。分支fix/natural-task-ending，基于PR #5的1b0e4ecc。PR #4/#5仍未合并，本轮PR目标为fix/preserve-step-sequence；下方为历史记录，当前进度以本节为准。

@@ -42,6 +42,11 @@ def chat(req: ChatRequest):
     return services.handle_chat(req.user_id, req.message)
 
 
+@app.post("/api/reminders/poll")
+def poll_reminders(req: UserRequest):
+    return services.poll_start_reminder(req.user_id)
+
+
 @app.post("/api/task/choose_time")
 def choose_time(req: ChooseTimeRequest):
     return services.handle_choose_time(req.user_id, req.when)

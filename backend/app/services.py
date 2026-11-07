@@ -33,6 +33,7 @@ _AFK = ["手机", "视频", "打游戏", "玩游戏", "抖音", "短视频", "�
 _REST = ["什么都不想干", "不想干", "今天休息", "放假", "躺平", "摆烂", "休息一天", "今天不想", "不干了"]
 _SWITCH = ["换个任务", "换成", "改做", "不做这个", "换一个", "换件事", "换个事"]
 _CONTINUE = ["接着", "继续"]
+_START_BUTTONS = ["现在开始", "5分钟后", "10分钟后", "今天不做"]
 
 _LEAD_FILLERS = sorted(
     ["那我试试", "我试试", "我试", "试试看", "试着", "我想", "我想做", "我要", "我准备", "我打算",
@@ -104,6 +105,7 @@ def _task_view(task: dict) -> TaskView:
         granularity=level_name(task["level"]),
         state=task["state"],
         step_id=step_plan.step_id(task),
+        start_due_at=db.get_start_due_at(task["user_id"]) if task["state"] == "ready" else None,
     )
 
 
@@ -111,7 +113,7 @@ def _buttons_for(task) -> list[str]:
     if not task:
         return []
     return {
-        "ready": ["现在开始", "待会儿", "今天不做"],
+        "ready": _START_BUTTONS,
         "committing": ["行", "再想想"],
         "executing": ["完成这一步", "太重了", "今天到这吧"],
     }.get(task["state"], [])
@@ -178,7 +180,7 @@ def _handoff_last_step(handoff: dict) -> str:
 def handle_open(user_id: str) -> Reply:
     info = db.open_session(user_id)
     task = db.get_active_task(user_id)
-    due = db.due_reminders(user_id)
+    due = db.due_reminders(user_id) + db.take_due_start_reminder(user_id)
 
     handoff_reply = None
     if not task and info["same_day_opens"] == 1:
@@ -211,6 +213,14 @@ def handle_chat(user_id: str, message: str) -> Reply:
         return Reply(reply=persona.afk_due(), state=task["state"] if task else "idle",
                      task=_task_view(task) if task else None, buttons=_buttons_for(task))
     return _chat_reply(user_id, text)
+
+
+def poll_start_reminder(user_id: str) -> Reply:
+    db.ensure_user(user_id)
+    due = db.take_due_start_reminder(user_id)
+    task = db.get_active_task(user_id)
+    return Reply(reply="", state=task["state"] if task else "idle",
+                 task=_task_view(task) if task else None, buttons=_buttons_for(task), due_reminders=due)
 
 
 def _chat_reply(user_id: str, text: str) -> Reply:
@@ -308,11 +318,11 @@ def _create_task(user_id: str, text: str) -> Reply:
         reply = persona.friction_note() + " " + reply
     reply = f"{reply} {persona.ask_when()}"
     return Reply(reply=reply, state="ready", task=_task_view(task),
-                 buttons=["现在开始", "待会儿", "今天不做"])
+                 buttons=_START_BUTTONS)
 
 
 def handle_choose_time(user_id: str, when: str) -> Reply:
-    _validate_choice(when, ("now", "later", "not_today"))
+    _validate_choice(when, ("now", "in_5_minutes", "in_10_minutes", "later", "not_today"))
     task = _require_task_state(user_id, ("ready",))
     if not task:
         return Reply(reply=persona.afk_due(), state="idle")
@@ -322,9 +332,13 @@ def handle_choose_time(user_id: str, when: str) -> Reply:
         return Reply(reply=persona.commit_prompt(), state="committing", task=_task_view(task),
                      buttons=["行", "再想想"])
     if when == "later":
-        due = (datetime.now() + timedelta(minutes=30)).isoformat(timespec="seconds")
-        db.add_reminder(user_id, f"该开始「{task['title']}」啦", due)
-        return Reply(reply=persona.scheduled("半小时后"), state="ready", task=_task_view(task), buttons=[])
+        return Reply(reply=persona.ask_delay(), state="ready", task=_task_view(task), buttons=_START_BUTTONS)
+    if when in ("in_5_minutes", "in_10_minutes"):
+        minutes = 5 if when == "in_5_minutes" else 10
+        if not db.schedule_task_start(user_id, minutes):
+            raise HTTPException(status_code=409, detail={"code": "INVALID_TASK_STATE", "message": "任务已变化，请刷新后再选时间。"})
+        return Reply(reply=persona.scheduled(f"{minutes}分钟后"), state="ready",
+                     task=_task_view(db.get_active_task(user_id)), buttons=_START_BUTTONS)
     # not_today
     db.clear_active_task(user_id)
     return Reply(reply=persona.rest_day(), state="idle")
@@ -344,7 +358,7 @@ def handle_commit(user_id: str, agree: bool) -> Reply:
                      buttons=["完成这一步", "太重了", "今天到这吧"])
     db.update_active_task(user_id, state="ready")
     return Reply(reply=persona.commit_disagree(), state="ready", task=_task_view(db.get_active_task(user_id)),
-                 buttons=["现在开始", "待会儿", "今天不做"])
+                 buttons=_START_BUTTONS)
 
 
 def handle_step_complete(user_id: str, duration_ms: int) -> Reply:
