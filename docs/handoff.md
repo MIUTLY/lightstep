@@ -17,7 +17,7 @@
 
 - 24项Python回归、3项Node回归、独立临时数据库上的离线smoke_test.py通过；无真实模型调用。
 - 修改文件：backend/app/services.py、schemas.py、main.py、persona.py，新增backend/test_task_flow.py；更新AGENTS.md、docs/api.md、handoff.md；新增本轮报告与local-development.md。
-- 提交：待本分支上传后在本轮PR记录。
+- 实施提交：[ee53e54](https://github.com/MIUTLY/lightstep/commit/ee53e54693f1a76def4f80b466d6adf678935084)；[PR #4](https://github.com/MIUTLY/lightstep/pull/4)。
 - 用户追加询问服务器联调：开发可用本地电脑，默认127.0.0.1不适用于手机访问电脑；原理与排查见 [本地联调](local-development.md)。未获得报错，尚不能判定实际故障。
 
 ## 后续重点
