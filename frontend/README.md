@@ -35,3 +35,14 @@ backend/static/ 的浏览器文本手帐是可运行的本地保存示例，不�
 
 **已知遗留（本次未整改）**：手帐页与回执页仍调用已停用的 `/api/journal*`（现返回 410 `JOURNAL_CLIENT_ONLY`），手帐尚未改为客户端本地保存图片与索引 —— 与本文件上方「回执图片和私人留言不上传」的边界冲突，待下一轮修正；`/api/health` 也尚未接入。
 
+
+
+## 预约提醒行为回归（2026-11-07）
+
+仓库根目录使用 Node 24 运行，无须安装前端构建依赖：
+
+```bash
+node --experimental-vm-modules --test --test-isolation=none frontend/tests/*.test.mjs backend/test_local_journal.cjs
+```
+
+当前共28项（预约新增22项、既有6项）。测试加载实际poller、session、API封装及chat.vue的script，替换Vue/uni平台边界并使用可控计时器、慢请求；覆盖隐藏/卸载、重复onShow、请求不重叠、消费后停表、改约重启、旧响应及错误提示。不执行Vue模板、样式或微信运行时，不能代替HBuilderX编译和真机验收。VM Modules会产生Node实验功能提示。
