@@ -1,4 +1,48 @@
-# 当前后端进度与交接
+# 当前进度与交接：前后端分离
+
+更新日期：2026-11-07。分支：feat/frontend-backend-boundary。
+远端基线：6972939b1f8ea70ab312e2d7c327969b6f260009。
+
+## 本轮目标与已完成
+
+用户确认采用 FastAPI + SQLite 管理任务与偏好，客户端保存回执及私人留言。
+
+- 新增 docs/architecture.md：技术方案、唯一任务状态、数据归属、五人分工及待定项。
+- 新增 docs/api.md、docs/deployment.md；更新需求、根与模块 README、AGENTS.md。
+- 后端新增监听地址/端口、重载、调试页开关及CORS来源配置，支持独立API部署；新增 /api/health。
+- 删除完成/退出自动写手帐的路径，新数据库不创建 journal 表，旧手帐接口返回410 JOURNAL_CLIENT_ONLY。
+- 旧数据库已有 journal 数据保持原样，不自动删除、不自动传给客户端。
+- 网页调试页支持独立API基地址；手帐文字仅在本浏览器主动保存，不再调用 /api/journal*。
+- 修复B02：HTTP便签与聊天便签都返回当前任务状态与步骤，不再错误返回idle。
+
+变更文件：AGENTS.md、README.md、backend/.env.example、backend/README.md、backend/app/config.py、db.py、main.py、schemas.py、services.py、backend/run.py、smoke_test.py、backend/static/app.js、index.html、config.js、local-journal.js、backend/test_storage_boundary.py、test_local_journal.cjs、docs/architecture.md、api.md、deployment.md、requirements.md、handoff.md、frontend/README.md。
+
+## 验证记录
+
+- python -m unittest -v test_storage_boundary.py：7项通过。覆盖恢复进度、完成与退出不生成回执、便签状态、旧手帐接口不写入/不删除旧数据、跨域预检和纯API部署。
+- node --test test_local_journal.cjs：3项通过。覆盖主动保存、重新读取、用户隔离、删除、坏数据保护及空间不足报错。
+- smoke_test.py：mock模式、独立临时SQLite数据库，全流程通过。原自动手帐断言改为验证停用接口。
+- JavaScript语法检查和 git diff --check 通过。
+- 测试依赖在仓库外独立安装；Python测试使用 FastAPI 0.162.0、Pydantic 2.14.3、httpx 0.28.1。出现Starlette/httpx兼容弃用提示，当前测试仍通过。
+- 自动浏览器视觉检查未完成：环境没有可运行的Chromium，官方浏览器包下载后不是有效ZIP。未宣称已完成浏览器视觉验收。
+- 未验证：真实模型、uni-app/微信真机、相册保存、图片持久文件与手帐、生产部署、并发与权限。
+
+## 下一轮与未解决项
+
+1. B01粒度切换跳步；B03普通提问覆盖目标；B04/B05状态与参数校验；B06非法模型结构；B07结束意图仍待修复。
+2. 5/10分钟预约、轻承诺到期/续时、步骤查看/重排尚未实现。
+3. 小程序业务源码尚未提交。前端按 architecture.md 与 api.md 接入，停止使用旧手帐接口。
+4. 退出挽留、跨天、历史、day_log保留、猫姿态和计时冲突仍待产品决定。现有里程碑话术等差异未清理，不代表产品全量验收。
+5. user_id只是演示标识，正式多用户身份权限方案尚未完成。
+
+## 相关提交
+
+本轮实施提交：待上传后补充。以下旧记录仅为历史基线，不表示本轮仍未改代码。
+
+---
+
+## 历史：首次同步与原始审查
+
 
 更新日期：2026-11-07（北京时间）
 
@@ -53,7 +97,7 @@
 排除真实运行数据库、Python缓存和本地占位文件。
 
 ## GitHub 同步
-- 私有仓库：https://github.com/MIUTLY/lightstep-backend
+- 私有仓库：https://github.com/MIUTLY/lightstep
 - 首次源码与文档同步提交：`chore: sync original backend and team handoff`。
 - 此提交本身即首次同步版本；后续实施请记录具体提交编号。
 

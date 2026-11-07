@@ -1,7 +1,7 @@
 # LightStep 项目协作约定
 
 ## 共同上下文
-- 工作前阅读根目录 README.md、docs/requirements.md、docs/handoff.md 和所改模块 README.md。
+- 工作前阅读根目录 README.md、docs/requirements.md、docs/handoff.md、docs/architecture.md 和所改模块 README.md。
 - 用户决定产品取舍；方案讨论明确需求和验收；Codex 负责代码实施、测试与交接。
 - 策划冲突标为待定，不把现有行为自动当作最终需求。
 
@@ -21,3 +21,9 @@
 - 前端成员提交源码后补齐真实依赖、版本和运行命令，不凭空创建实现。
 - 完成后更新 docs/handoff.md：变更、测试命令与结果、未解决问题和提交编号。
 - 不提交真实 .env、密钥、数据库、缓存、虚拟环境、node_modules 和小程序本地私有配置。
+
+## 已确认数据边界
+- 任务、进度、偏好和摩擦地图由后端 SQLite 管理，前端不能重复推进。
+- 回执图片和私人留言仅在客户端保存，不恢复服务端 journal 写入或自动生成。
+- 原有 journal 表若存在不擅自删除；跨天、历史、退出的冲突仍需明确决定。
+- 后端边界变更运行 test_storage_boundary.py；本地手帐变更运行 node --test test_local_journal.cjs。

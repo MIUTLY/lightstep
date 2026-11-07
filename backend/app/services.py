@@ -3,13 +3,14 @@
 职责：
   - 意图识别（关键词规则，离线可用）
   - 状态机：idle → ready → committing → executing → done
-  - 自适应粒度、摩擦地图、跨天交接、私人手帐、便签/提醒回执
+  - 自适应粒度、摩擦地图、跨天交接、便签与提醒
+  - 回执图片及回执留言由客户端保存，不写入服务端
 """
 import json
 from datetime import datetime, timedelta
 
 from . import persona
-from .db import db, today_str
+from .db import db
 from .decompose import domain_of
 from .granularity import judge, shift_level, map_progress, level_name
 from .llm import llm
@@ -342,8 +343,6 @@ def handle_step_complete(user_id: str, duration_ms: int) -> Reply:
 
 def _complete(user_id: str, task: dict, steps_done: int) -> Reply:
     db.clear_active_task(user_id)
-    # 回执 → 私人静默手帐
-    db.add_journal_entry(user_id, today_str(), steps_done, [task["title"]], "")
     summary = db.get_today_summary(user_id)
     return Reply(reply=persona.all_done(task["title"], steps_done), state="done",
                  summary=_summary_text(summary), buttons=[])
@@ -380,8 +379,6 @@ def handle_resize(user_id: str, direction: str) -> Reply:
 def _gentle_end(user_id: str, task: dict) -> Reply:
     db.clear_active_task(user_id)
     summary = db.get_today_summary(user_id)
-    if summary["steps_done"] > 0:
-        db.add_journal_entry(user_id, summary["date"], summary["steps_done"], summary["titles"], "")
     if summary["titles"]:
         what = "动了「" + "」「".join(summary["titles"]) + "」"
         reply = persona.gentle_end(what)
@@ -404,7 +401,13 @@ def handle_exit(user_id: str, gentle: bool = False) -> Reply:
 def handle_note(user_id: str, content: str) -> Reply:
     db.ensure_user(user_id)
     db.add_note(user_id, content)
-    return Reply(reply=persona.note_ok(), state="idle")
+    return _note_reply(user_id)
+
+
+def _note_reply(user_id: str) -> Reply:
+    task = db.get_active_task(user_id)
+    return Reply(reply=persona.note_ok(), state=task["state"] if task else "idle",
+                 task=_task_view(task) if task else None, buttons=_buttons_for(task))
 
 
 def _note(user_id: str, text: str) -> Reply:
@@ -414,7 +417,7 @@ def _note(user_id: str, text: str) -> Reply:
             content = text.split(w, 1)[-1].strip("，。！？、,.!? ")
             break
     db.add_note(user_id, content or text)
-    return Reply(reply=persona.note_ok(), state="idle")
+    return _note_reply(user_id)
 
 
 def _afk(user_id: str) -> Reply:
@@ -457,26 +460,6 @@ def resume_handoff(user_id: str) -> Reply:
 def dismiss_handoff(user_id: str) -> Reply:
     db.clear_handoff(user_id)
     return Reply(reply=persona.handoff_dismiss(), state="idle")
-
-
-# ---------- 私人手帐 ----------
-
-def add_journal(user_id: str, note: str) -> dict:
-    db.ensure_user(user_id)
-    summary = db.get_today_summary(user_id)
-    entry_id = db.add_journal_entry(user_id, summary["date"], summary["steps_done"], summary["titles"], note)
-    return {"id": entry_id, "reply": persona.journal_added()}
-
-
-def get_journal(user_id: str) -> list[dict]:
-    db.ensure_user(user_id)
-    return db.get_journal(user_id)
-
-
-def delete_journal(user_id: str, entry_id: int) -> dict:
-    db.ensure_user(user_id)
-    ok = db.delete_journal_entry(user_id, entry_id)
-    return {"deleted": ok, "reply": persona.journal_deleted() if ok else "没找到这条。"}
 
 
 # ---------- 查询 ----------

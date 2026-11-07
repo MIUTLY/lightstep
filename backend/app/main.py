@@ -4,14 +4,15 @@
 """
 import os
 
-from fastapi import FastAPI
+from fastapi import FastAPI, HTTPException
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.staticfiles import StaticFiles
 
 from . import services
+from .config import settings
 from .schemas import (
     ChatRequest, ChooseTimeRequest, CommitRequest, ExitRequest,
-    JournalAddRequest, NoteRequest, StepCompleteRequest, StepResizeRequest,
+    NoteRequest, StepCompleteRequest, StepResizeRequest,
     UserRequest,
 )
 
@@ -19,10 +20,16 @@ app = FastAPI(title="轻步 LightStep", description="AI 学习搭子「小步」
 
 app.add_middleware(
     CORSMiddleware,
-    allow_origins=["*"],
+    allow_origins=list(settings.cors_origins),
     allow_methods=["*"],
     allow_headers=["*"],
 )
+
+
+@app.get("/api/health")
+def health():
+    """进程存活检查；不表示真实模型已连通。"""
+    return {"status": "ok", "storage": "sqlite", "receipt_storage": "client"}
 
 
 @app.post("/api/session/open")
@@ -75,19 +82,15 @@ def handoff_dismiss(req: UserRequest):
     return services.dismiss_handoff(req.user_id)
 
 
-@app.get("/api/journal")
-def journal_list(user_id: str):
-    return services.get_journal(user_id)
-
-
-@app.post("/api/journal/add")
-def journal_add(req: JournalAddRequest):
-    return services.add_journal(req.user_id, req.note)
-
-
-@app.delete("/api/journal/{entry_id}")
-def journal_delete(entry_id: int, user_id: str):
-    return services.delete_journal(user_id, entry_id)
+@app.get("/api/journal", deprecated=True)
+@app.post("/api/journal/add", deprecated=True)
+@app.delete("/api/journal/{entry_id}", deprecated=True)
+def journal_retired():
+    # 不解析或保存回执留言；旧客户端明确得到迁移提示。
+    raise HTTPException(status_code=410, detail={
+        "code": "JOURNAL_CLIENT_ONLY",
+        "message": "回执与手帐由客户端本地保存，此服务端接口已停用。",
+    })
 
 
 @app.get("/api/session/state")
@@ -107,4 +110,5 @@ def daily_summary(user_id: str):
 
 # 前端静态资源（必须在所有 API 路由之后挂载，否则会抢走 /api 路径）
 _STATIC_DIR = os.path.join(os.path.dirname(os.path.dirname(os.path.abspath(__file__))), "static")
-app.mount("/", StaticFiles(directory=_STATIC_DIR, html=True), name="static")
+if settings.serve_debug_ui:
+    app.mount("/", StaticFiles(directory=_STATIC_DIR, html=True), name="static")

@@ -3,7 +3,7 @@
 三层记忆模型：
   - 任务级（active_task / day_log）：当天清空
   - 偏好级（preferences / friction / handoff）：长期沉淀，跨天保留
-  - 情感级（notes / journal / reminders）：很轻，可有可无
+  - 便签与提醒（notes / reminders）；回执与私人手帐仅存客户端
 """
 import json
 import sqlite3
@@ -92,16 +92,6 @@ CREATE TABLE IF NOT EXISTS handoff (
     updated_at  TEXT
 );
 
--- 私人静默手帐：回执式记录，安静、只自己看
-CREATE TABLE IF NOT EXISTS journal (
-    id          INTEGER PRIMARY KEY AUTOINCREMENT,
-    user_id     TEXT,
-    date        TEXT,
-    steps_done  INTEGER NOT NULL DEFAULT 0,
-    titles_json TEXT NOT NULL DEFAULT '[]',
-    note        TEXT,
-    created_at  TEXT
-);
 """
 
 
@@ -338,31 +328,6 @@ class DB:
         with self._conn() as c:
             c.execute("DELETE FROM handoff WHERE user_id=?", (user_id,))
 
-    # ---------- 私人手帐 ----------
-
-    def add_journal_entry(self, user_id: str, date: str, steps_done: int, titles: list[str], note: str) -> int:
-        with self._conn() as c:
-            cur = c.execute(
-                "INSERT INTO journal (user_id, date, steps_done, titles_json, note, created_at) VALUES (?, ?, ?, ?, ?, ?)",
-                (user_id, date, steps_done, json.dumps(titles, ensure_ascii=False), note, now_iso()),
-            )
-            return cur.lastrowid
-
-    def get_journal(self, user_id: str) -> list[dict]:
-        with self._conn() as c:
-            rows = c.execute("SELECT * FROM journal WHERE user_id=? ORDER BY id DESC", (user_id,)).fetchall()
-        out = []
-        for r in rows:
-            d = dict(r)
-            d["titles"] = json.loads(d["titles_json"] or "[]")
-            d.pop("titles_json", None)
-            out.append(d)
-        return out
-
-    def delete_journal_entry(self, user_id: str, entry_id: int) -> bool:
-        with self._conn() as c:
-            cur = c.execute("DELETE FROM journal WHERE id=? AND user_id=?", (entry_id, user_id))
-            return cur.rowcount > 0
 
 
 db = DB()

@@ -3,6 +3,7 @@
 /* 轻步 LightStep 前端逻辑：与后端 /api/* 交互，渲染「小步」的对话。 */
 
 const $ = (sel) => document.querySelector(sel);
+const API_BASE = (window.LIGHTSTEP_API_BASE || "").replace(/\/$/, "");
 
 // 同一浏览器持久化一个 user_id，让记忆（摩擦地图 / 跨天交接）跨会话保留
 let userId = localStorage.getItem("lightstep_user");
@@ -10,6 +11,8 @@ if (!userId) {
   userId = "u_" + Math.random().toString(36).slice(2, 10) + Date.now().toString(36);
   localStorage.setItem("lightstep_user", userId);
 }
+
+const localJournal = LightStepLocalJournal.create(localStorage, "lightstep_journal_" + userId);
 
 const messagesEl = $("#messages");
 const inputEl = $("#input");
@@ -24,7 +27,7 @@ let noteMode = false;
 // ---------- HTTP ----------
 
 async function post(path, body) {
-  const res = await fetch(path, {
+  const res = await fetch(API_BASE + path, {
     method: "POST",
     headers: { "Content-Type": "application/json" },
     body: JSON.stringify(body),
@@ -34,7 +37,7 @@ async function post(path, body) {
 }
 
 async function get(path) {
-  const res = await fetch(path);
+  const res = await fetch(API_BASE + path);
   if (!res.ok) throw new Error(path + " " + res.status);
   return res.json();
 }
@@ -284,12 +287,13 @@ async function loadPanel(key) {
     if (key === "today") {
       renderToday(await get("/api/daily/summary?user_id=" + userId));
     } else if (key === "journal") {
-      renderJournal(await get("/api/journal?user_id=" + userId));
+      renderJournal(localJournal.list());
     } else if (key === "history") {
       renderHistory(await get("/api/history?user_id=" + userId));
     }
   } catch (e) {
-    /* 后端未启动时静默 */
+    if (key === "journal") systemNote("未能读取本地手帐：" + e.message);
+    /* 其他调试面板在后端未启动时静默 */
   }
 }
 
@@ -331,7 +335,7 @@ function renderJournal(list) {
   const form = document.createElement("form");
   form.className = "journal-form";
   const inp = document.createElement("input");
-  inp.placeholder = "写一句今天的…";
+  inp.placeholder = "写给自己一句话，仅存本机";
   const addBtn = document.createElement("button");
   addBtn.type = "submit";
   addBtn.textContent = "记下";
@@ -341,9 +345,13 @@ function renderJournal(list) {
     e.preventDefault();
     const note = inp.value.trim();
     if (!note) return;
-    await post("/api/journal/add", { user_id: userId, note });
-    inp.value = "";
-    loadPanel("journal");
+    try {
+      localJournal.add(note);
+      inp.value = "";
+      loadPanel("journal");
+    } catch (e) {
+      systemNote("未能保存到本机：" + e.message);
+    }
   });
   el.appendChild(form);
 
@@ -368,22 +376,16 @@ function renderJournal(list) {
     del.className = "del-btn";
     del.textContent = "删除";
     del.addEventListener("click", async () => {
-      await fetch("/api/journal/" + entry.id + "?user_id=" + userId, { method: "DELETE" });
-      loadPanel("journal");
+      try {
+        localJournal.remove(entry.id);
+        loadPanel("journal");
+      } catch (e) {
+        systemNote("未能删除本地手帐：" + e.message);
+      }
     });
     top.appendChild(del);
     card.appendChild(top);
 
-    if (entry.titles && entry.titles.length) {
-      const t = document.createElement("div");
-      t.className = "journal-titles";
-      t.textContent = entry.titles.join("、");
-      card.appendChild(t);
-    }
-    const steps = document.createElement("div");
-    steps.className = "journal-steps";
-    steps.textContent = entry.steps_done + " 小步";
-    card.appendChild(steps);
     if (entry.note) {
       const n = document.createElement("div");
       n.className = "journal-note";
