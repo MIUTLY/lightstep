@@ -2,6 +2,7 @@ import { defineStore } from './defineStore.js'
 import { useUser } from './user.js'
 import * as api from '@/api/index.js'
 import { displayLabel, safeDuration } from '@/utils/format.js'
+import { stepKey } from '@/utils/stepIdentity.js'
 
 /**
  * 会话 store：整个小程序的单一状态源。
@@ -87,7 +88,7 @@ export const useSession = defineStore('session', {
 
 		function syncStepTimer(task) {
 			if (task && task.state === 'executing') {
-				const key = task.title + '|' + task.current_step
+				const key = stepKey(task)
 				if (key !== state.lastStepKey) {
 					state.lastStepKey = key
 					state.stepStartedAt = Date.now()
@@ -289,3 +290,4 @@ export const useSession = defineStore('session', {
 		}
 	}
 })
+

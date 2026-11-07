@@ -15,7 +15,7 @@ AI 学习搭子「小步」—— 一只懒洋洋的黑猫，帮你把「动一�
 - [团队与 Codex 协作约定](../AGENTS.md)
 
 已有离线任务流程和网页调试页；DeepSeek真实调用及项目任务创建已验证；对话质量、小程序联调与部署仍待验证。
-优先处理跳步、便签状态不一致、提问覆盖任务、参数校验和模型异常兜底。
+任务保护、参数/状态校验和粒度跳步已有修复分支；当前合并状态与剩余任务以交接记录为准。
 后续按任务开分支并提交 PR，由另一位队员检查后合并。
 
 ## 快速开始
@@ -37,7 +37,7 @@ python smoke_test.py     # 跑一遍全流程冒烟测试（离线、无需 key�
 - 卡得久（> 90s）→ 启动吃力，下一步**拆细**
 - 中间 → 保持
 
-三档粒度：细 / 中 / 粗。切换时按完成比例映射进度，不让人从头再来。
+三档粒度：细 / 中 / 粗。新任务以 normal 清单作为一条有序路线；粗档合并相邻两个待做动作，细档对当前动作做可确认的数量或并列拆分。完成只推进刚展示过的动作，不再在三份清单间按比例换位置。无法安全拆分时保持原文，不额外调用模型；结束提示只表示本次小段结束，不承诺整个大目标完成。旧任务沿用其当前清单和位置。
 
 ### 2. 两段式情绪提示
 先识别情绪（焦虑 / 低落 / 正常 / 亢奋），再决定回复语气；接真 LLM 时拆成两次调用。
@@ -91,6 +91,7 @@ backend/
 │   ├── persona.py       # 小步人设文案
 │   ├── decompose.py     # 离线拆解 + 情绪识别 + 领域识别
 │   ├── granularity.py   # 自适应粒度引擎
+│   ├── step_plan.py     # 有序动作队列与稳定步骤标识
 │   ├── prompts.py       # LLM 提示词
 │   ├── llm.py           # Mock / OpenAI 兼容 LLM
 │   ├── services.py      # 核心编排
@@ -116,3 +117,5 @@ backend/
 接入步骤和本次实测结果见 [AI接入说明](../docs/ai-integration.md)。服务端设置模型地址、名称及密钥后，运行 python check_llm.py；加 --task 额外验证一次任务拆解。不使用离线兜底，失败会返回非零退出码。默认示例使用 deepseek-flash、LLM_THINKING=disabled、LLM_MAX_TOKENS=1024。使用其他供应商时按其协议修改，密钥不入库。
 
 模型回归检查：python -m unittest -v test_llm.py test_storage_boundary.py。
+
+任务与粒度回归：python -m unittest -v test_step_plan.py test_task_flow.py test_llm.py test_storage_boundary.py（36项）。仓库根目录运行 node --test frontend/tests/stepIdentity.test.mjs backend/test_local_journal.cjs（6项）。后者只检查纯逻辑，不代表小程序构建或真机联调完成。

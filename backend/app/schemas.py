@@ -49,6 +49,7 @@ class TaskView(BaseModel):
     steps_done: int
     granularity: str  # fine | normal | coarse
     state: str       # ready | committing | executing | done
+    step_id: str = ""  # 当前显示动作的稳定标识，计时不能只比较文字
 
 
 class Reply(BaseModel):

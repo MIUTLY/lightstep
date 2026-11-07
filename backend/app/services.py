@@ -14,7 +14,8 @@ from fastapi import HTTPException
 from . import persona
 from .db import db
 from .decompose import domain_of
-from .granularity import judge, shift_level, map_progress, level_name
+from .granularity import judge, shift_level, level_name
+from . import step_plan
 from .llm import llm
 from .schemas import Reply, TaskView
 
@@ -92,12 +93,7 @@ def _levels_of(task: dict) -> dict:
 
 
 def _current_step_text(task: dict) -> str:
-    levels = _levels_of(task)
-    steps = levels.get(level_name(task["level"]), [])
-    if not steps:
-        return task["title"]
-    idx = min(task["current_idx"], len(steps) - 1)
-    return steps[idx]
+    return step_plan.current_text(task)
 
 
 def _task_view(task: dict) -> TaskView:
@@ -107,6 +103,7 @@ def _task_view(task: dict) -> TaskView:
         steps_done=task["steps_done"],
         granularity=level_name(task["level"]),
         state=task["state"],
+        step_id=step_plan.step_id(task),
     )
 
 
@@ -173,12 +170,7 @@ def _weekly_milestone(visit_dates: list) -> bool:
 
 
 def _handoff_last_step(handoff: dict) -> str:
-    levels = json.loads(handoff["levels_json"])
-    steps = levels.get(level_name(handoff["level"]), [])
-    if not steps:
-        return handoff["title"]
-    idx = min(handoff["current_idx"], len(steps) - 1)
-    return steps[idx]
+    return _current_step_text(handoff)
 
 
 # ---------- 会话 ----------
@@ -301,7 +293,7 @@ def _create_task(user_id: str, text: str) -> Reply:
         level = min(3, level + 1)
 
     decomposed = llm.decompose(title)
-    levels_json = json.dumps(decomposed, ensure_ascii=False)
+    levels_json = json.dumps(step_plan.new_plan(decomposed, level), ensure_ascii=False)
     db.create_active_task(user_id, title, levels_json, level, state="ready")
     task = db.get_active_task(user_id)
 
@@ -367,16 +359,14 @@ def handle_step_complete(user_id: str, duration_ms: int) -> Reply:
     db.record_step_done(user_id, task["title"])
     db.update_active_task(user_id, steps_done=steps_done)
 
-    levels = _levels_of(task)
-    cur_total = len(levels.get(level_name(task["level"]), []))
+    levels = step_plan.ensure_plan(task)
     new_level = task["level"] if direction == "keep" else shift_level(task["level"], direction)
-    new_total = len(levels.get(level_name(new_level), []))
-
-    if task["current_idx"] + 1 >= cur_total:
+    next_idx = step_plan.next_cursor(levels, task["current_idx"])
+    if step_plan.is_finished(levels, next_idx):
         return _complete(user_id, task, steps_done)
-
-    next_idx = map_progress(task["current_idx"] + 1, cur_total, new_total)
-    db.update_active_task(user_id, level=new_level, current_idx=next_idx, state="executing")
+    step_plan.prepare_step(levels, next_idx, new_level)
+    db.update_active_task(user_id, level=new_level, current_idx=next_idx, state="executing",
+                          levels_json=json.dumps(levels, ensure_ascii=False))
     task2 = db.get_active_task(user_id)
     step = _current_step_text(task2)
 
@@ -413,20 +403,21 @@ def handle_resize(user_id: str, direction: str) -> Reply:
     domain = domain_of(task["title"])
     db.record_friction(user_id, domain, "stuck" if direction == "smaller" else "smooth")
 
-    levels = _levels_of(task)
-    cur_total = len(levels.get(level_name(task["level"]), []))
+    levels = step_plan.ensure_plan(task)
     new_level = shift_level(task["level"], gdir)
-    new_total = len(levels.get(level_name(new_level), []))
-
-    if new_level == task["level"]:
+    before = _current_step_text(task)
+    step_plan.prepare_step(levels, task["current_idx"], new_level)
+    updated = dict(task, level=new_level, levels_json=json.dumps(levels, ensure_ascii=False))
+    if new_level == task["level"] and _current_step_text(updated) == before:
         return Reply(reply=persona.boundary(gdir), state=task["state"], task=_task_view(task),
                      buttons=_buttons_for(task))
-
-    new_idx = map_progress(task["current_idx"], cur_total, new_total)
-    db.update_active_task(user_id, level=new_level, current_idx=new_idx)
+    db.update_active_task(user_id, level=new_level, levels_json=updated["levels_json"])
     task2 = db.get_active_task(user_id)
     step = _current_step_text(task2)
-    reply = f"{persona.shrink() if direction == 'smaller' else persona.grow()} 现在这一步：「{step}」"
+    if step == before:
+        reply = persona.boundary(gdir)
+    else:
+        reply = f"{persona.shrink() if direction == 'smaller' else persona.grow()} 现在这一步：「{step}」"
     return Reply(reply=reply, state=task2["state"], task=_task_view(task2),
                  buttons=_buttons_for(task2))
 
