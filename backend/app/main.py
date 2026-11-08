@@ -12,7 +12,7 @@ from fastapi.responses import JSONResponse
 from .llm import AIError
 from .public_text import PublicJSONResponse
 
-from . import services, memo
+from . import services, memo, presentation
 from .schemas import MemoCommand, FocusCaptureRequest
 from .config import settings
 from .schemas import (
@@ -29,6 +29,23 @@ app.add_middleware(
     allow_methods=["*"],
     allow_headers=["*"],
 )
+
+
+@app.get('/api/assets/manifest')
+def asset_manifest():
+    return presentation.catalogue()
+
+
+class PublicAssetFiles(StaticFiles):
+    async def get_response(self, path, scope):
+        response=await super().get_response(path, scope)
+        if response.status_code==200:
+            response.headers['Cache-Control']='public, max-age=31536000, immutable'
+        return response
+
+
+# Independent of optional debug UI; originals and private data are never mounted.
+app.mount('/api/assets/v1', PublicAssetFiles(directory=str(presentation.ASSET_ROOT/'v1')), name='public-assets')
 
 
 @app.get("/api/health")

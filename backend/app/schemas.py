@@ -60,6 +60,7 @@ class NoteRequest(UserRequest):
 # ---------- 响应 ----------
 
 class TaskView(BaseModel):
+    presentation: Optional[dict] = None
     title: str
     current_step: str
     steps_done: int

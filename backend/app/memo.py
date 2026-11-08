@@ -5,7 +5,7 @@ from datetime import datetime
 from uuid import uuid4
 from zoneinfo import ZoneInfo
 from fastapi import HTTPException
-from . import task_forest
+from . import task_forest, presentation
 from .llm import AIError, Clarification, invalid_response, AI_DEADLINE
 from time import monotonic
 
@@ -36,10 +36,35 @@ def day_completed(day):
     return bool(day.get('finished')) and not day['items']
 
 
+def decode_state(c, uid, row):
+    state=json.loads(row[0]) if row else empty()
+    old={i['id']:i for d in state['days'].values() for i in d['items']
+         if not i['completed'] and 'presentation_completed_steps' not in i}
+    if old:
+        sessions={e['session_id']:e['item_id'] for e in state['events'] if e['kind']=='receipt'}
+        if state['active']:sessions[state['active']['session_id']]=state['active']['item_id']
+        counts={k:0 for k in old}
+        for op in c.execute('SELECT payload,response FROM memo_operations WHERE user_id=?',(uid,)):
+            cmd=json.loads(op['payload']);result=json.loads(op['response']) if op['response'] else None
+            item_id=sessions.get(cmd.get('session_id'))
+            if cmd['action']=='complete' and item_id in counts and result and result['operation']['status']=='succeeded':
+                counts[item_id]+=1
+        for ident,item in old.items():
+            has_done=bool(item.get('plan') and item['plan']['completed_leaf_ids'])
+            item['presentation_completed_steps']=counts[ident] if counts[ident] or not has_done else None
+            item['presentation_count_source']='operation_history' if counts[ident] else 'legacy_count_unavailable' if has_done else 'recorded'
+    return retain_unfinished(state)
+
+
+def item_presentation(item, finished=False):
+    return presentation.for_steps(item.get('presentation_completed_steps',0),finished=finished,
+        source=item.get('presentation_count_source','recorded'))
+
+
 def load(db, uid):
     with db._conn() as c:
         row = c.execute('SELECT data FROM memo_state WHERE user_id=?', (uid,)).fetchone()
-        return retain_unfinished(json.loads(row[0])) if row else empty()
+        return decode_state(c, uid, row)
 
 
 def view(state, date=None):
@@ -57,6 +82,7 @@ def view(state, date=None):
         row = {k: v for k, v in item.items() if k != 'plan'}
         plan = item.get('plan')
         row['progress'] = progress(plan)
+        row['presentation'] = item_presentation(item)
         row['step'] = task_forest.view(plan) if plan and plan['current_node_id'] else None
         items.append(row)
     first = next((i for i in items if not i['completed']), None)
@@ -64,12 +90,13 @@ def view(state, date=None):
     active_item = None
     if active:
         i = find(state, active['item_id'])[1]
-        active_item = dict(active, title=i['title'], scope=i['scope'], progress=progress(i['plan']), step=task_forest.view(i['plan']))
+        active_item = dict(active, presentation=item_presentation(i), title=i['title'], scope=i['scope'], progress=progress(i['plan']), step=task_forest.view(i['plan']))
     return {'navigation': {'sidebar_locked': bool(active), 'can_collapse_focus': not bool(active)},
             'state': 'executing' if active else 'memo', 'revision': state['revision'], 'date': date,
             'today_date': current_date, 'available_dates': available_dates,
             'today_all_completed': day_completed(state['days'].get(current_date, {'items':[]})),
             'items': items, 'focus': active_item,
+            'presentation_policy': {'catalogue_url':'/api/assets/manifest','idle_timeout_seconds':300,'idle_effect':'pet_image_only'},
             'clarifications': pending_items(state),
             'can_enter_focus': not bool(pending_items(state)) and not bool(active),
             'all_completed': day_completed(day),
@@ -108,7 +135,7 @@ def end_focus(state, date, item, completed):
     facts = progress(plan)
     facts['session_completed_leaf_ids'] = [n for n in plan['completed_leaf_ids'] if n not in active['initial_done']]
     facts['session_completed_actions'] = [plan['nodes'][n]['text'] for n in facts['session_completed_leaf_ids']]
-    event(state, 'receipt', item_id=item['id'], title=item['title'], scope=item['scope'], date=date,
+    event(state, 'receipt', occurred_date=today(), presentation=item_presentation(item, finished=completed), item_id=item['id'], title=item['title'], scope=item['scope'], date=date,
           session_id=active['session_id'], outcome='completed' if completed else 'interrupted', **facts)
     state['active'] = None
     retain_unfinished(state)
@@ -135,7 +162,7 @@ def execute(db, ai, uid, request_id, command):
         if previous and previous['payload'] != payload:
             raise HTTPException(409, 'request_id已用于不同操作。')
         row = c.execute('SELECT data FROM memo_state WHERE user_id=?', (uid,)).fetchone()
-        state = retain_unfinished(json.loads(row[0])) if row else empty()
+        state = decode_state(c, uid, row)
         if command['action']=='focus_capture':
             from . import focus_capture
             focus_capture.prepare(c,uid,request_id,command,state)
@@ -151,7 +178,7 @@ def execute(db, ai, uid, request_id, command):
                 return cached
         c.execute('INSERT OR REPLACE INTO memo_operations VALUES(?,?,?,?,NULL)', (uid,request_id,payload,attempt))
         row = c.execute('SELECT data FROM memo_state WHERE user_id=?', (uid,)).fetchone()
-        state = retain_unfinished(json.loads(row[0])) if row else empty()
+        state = decode_state(c, uid, row)
     revision = state['revision']
     original = copy.deepcopy(state)
     try:
@@ -177,7 +204,7 @@ def execute(db, ai, uid, request_id, command):
         c.execute('BEGIN IMMEDIATE')
         op = c.execute('SELECT attempt FROM memo_operations WHERE user_id=? AND request_id=?', (uid,request_id)).fetchone()
         row = c.execute('SELECT data FROM memo_state WHERE user_id=?', (uid,)).fetchone()
-        current = retain_unfinished(json.loads(row[0])) if row else empty()
+        current = decode_state(c, uid, row)
         if not op or op[0] != attempt or current['revision'] != revision:
             raise HTTPException(409, '任务清单或进度已变化，请刷新后重试，已有数据已保留。')
         if command['action']=='select' and state['active'] and c.execute('SELECT 1 FROM active_task WHERE user_id=?',(uid,)).fetchone():
@@ -234,7 +261,7 @@ def apply(state, ai, cmd):
             prior['revision'] = state['revision']+1
         for title in titles:
             day['items'].append({'id':uuid4().hex, 'title':title, 'original_input':cmd['text'],
-                                'completed':False, 'scope':None, 'question':None, 'answers':[], 'plan':None})
+                                'completed':False, 'presentation_completed_steps':0, 'scope':None, 'question':None, 'answers':[], 'plan':None})
     elif action == 'reorder':
         day = state['days'].get(cmd['date'], {'items':[]})
         ids = cmd['item_ids']
@@ -284,6 +311,8 @@ def apply(state, ai, cmd):
         if action == 'resize':
             task_forest.resize(plan, cmd['direction'])
         elif action == 'complete':
+            if item.get('presentation_completed_steps') is not None:
+                item['presentation_completed_steps'] += 1
             if task_forest.complete(plan):
                 item['completed'] = True
                 end_focus(state,date,item,True)

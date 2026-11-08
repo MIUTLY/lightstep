@@ -77,7 +77,7 @@ def apply(state, ai, cmd):
         anchor=matches[0]
     index = items.index(anchor)+1 if anchor else len(items)
     added=[{'id':uuid4().hex,'title':t,'original_input':ctx['original_input'],
-            'completed':False,'scope':None,'question':None,'answers':[],'plan':None} for t in titles]
+            'completed':False,'presentation_completed_steps':0,'scope':None,'question':None,'answers':[],'plan':None} for t in titles]
     items[index:index]=added
     result={'saved':True,'batch_id':ctx['batch_id'],'added_item_ids':[i['id'] for i in added],
             'count':len(added),'date':date,'after_item_id':anchor['id'] if anchor else None,

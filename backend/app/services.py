@@ -11,7 +11,7 @@ from datetime import datetime, timedelta
 
 from fastapi import HTTPException
 
-from . import persona
+from . import persona, presentation
 from .db import db
 from .decompose import domain_of
 from .ending_intent import ending_intent
@@ -114,6 +114,7 @@ def _task_view(task: dict) -> TaskView:
         "current_step": step_plan.current_text(task), "step_id": step_plan.step_id(task)}
     return TaskView(
         title=task["title"],
+        presentation=presentation.for_steps(task["steps_done"]),
         steps_done=task["steps_done"],
         granularity=level_name(task["level"]),
         state=task["state"],
