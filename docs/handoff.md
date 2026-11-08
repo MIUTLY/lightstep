@@ -1,4 +1,42 @@
-# 最新交接：连续执行备忘录任务，结束后回对话并填写回执
+# 最新交接：主页加载与轻重按钮故障修复
+
+2026-11-08，分支 fix/chat-homepage-load，基于 main cc5f8ae6304dfa797d7da1d23530a53775149115。实施提交 [650dc1af2201576aeb0d3ab1a368a2025e9a97ef](https://github.com/MIUTLY/lightstep/commit/650dc1af2201576aeb0d3ab1a368a2025e9a97ef)。本轮修复尚未合并/部署。此前 PR #28 已合并到 329763b，队友 PR #29/#30 随后已合入当前基线，下方旧交接保留为历史。
+
+## 依据和原因
+
+用户反馈主页打不开、专注页轻一点/重一点无反应，延续本轮授权修复相关前端。主页根因是 PR #28 默认参数中的裸 uni，微信编译没有转换，运行时报 ReferenceError；该修复已由队友 PR #29 完成。本轮保留并独立复现原编译产物失败、新产物默认存储成功。
+
+轻重处理函数把 transitionBusy 的 ref 对象直接作布尔判断，始终返回，未发送 API。修正为 .value，统一失败提示、保留无任务提示和操作锁。原测试未调用轻重处理函数，且提供全局 uni 掩盖微信运行差异；补充对应检查。
+
+## 修改文件和目的
+
+- frontend/pages/focusmode/focusmode.vue、store/today.js：恢复轻重请求，网络/业务/意外异常提示，删除已无需要的临时请求日志；保留队友 PR #30 按钮布局、长步骤滚动和票根排版。
+- frontend/pages/chat/chat.vue、components/FocusReceiptDialog.vue、utils/systemInfo.js：回执按需挂载、窗口API容错、首次显示恢复草稿并绘图。
+- frontend/tests/focusResize.test.mjs（6项）、receiptMount.test.mjs（3项）、compiledFocusSmoke.cjs（4项）及 tests/README.md。
+- 根/前端README、docs/requirements.md、docs/api.md、CODEX_HANDOFF.md、本文件与[详细报告](change-reports/2026-11-08-homepage-resize.md)。后端接口/生产代码无改动，不重写森林或进度。
+
+## 测试命令与结果
+
+仓库根目录：
+```bash
+node --experimental-vm-modules --test --test-isolation=none frontend/tests/*.test.mjs backend/test_local_journal.cjs
+LIGHTSTEP_MP_BUILD=/workspace/work/homepage-uni-build/dist/build/mp-weixin node --test --test-isolation=none frontend/tests/compiledFocusSmoke.cjs
+git diff --check
+```
+
+常规 **59项通过，249.167ms**；真实mp-weixin产物 **4项通过，40.707ms**；diff检查通过。修复前轻重点击回归最初5项均失败（请求数0），修复后新增异常分支共6项通过。所有动作测试用隔离替身，不操作真实用户数据。
+
+仓库外官方 uni-app 5.36（3.0.0-alpha-5030620261106001）+ Vue 3.4.21 + Vite 5.2.8：`CI=1 UNI_INPUT_DIR=/workspace/work/homepage-uni-build/src npm run build:mp`，Build complete。CI=1关闭官方在线版本检查，不上传构建环境元数据。产物检查不提供全局uni，覆盖默认存储、系统信息异常、回执首挂草稿/绘图、主页setup及首屏渲染；仍替换平台/vendor接口。
+
+## 未完成与验收边界
+
+未进行微信开发者工具或真机实际运行，需从修复分支重新编译验收主页、长步骤下点击命中、轻重往返、断网重试、退出/完成回执、保存手帐和前后台。不要清除缓存或已有任务。源码测试、编译成功与产物脚本不是微信平台验收。
+
+本轮未重新运行后端190项或真实AI调用（后端未变）。新手帐大底图仍待提供，图片/私人文字仅本地的边界不变。
+
+---
+
+# 历史交接：连续执行备忘录任务，结束后回对话并填写回执
 
 2026-11-08，分支fix/focus-chain-and-receipts，基于最新main e235eedefcfa2ed229356ec7320217b02f0ed0e8。实施[e094e6495750cc6de338f51dc3a4ae7811db7d0a](https://github.com/MIUTLY/lightstep/commit/e094e6495750cc6de338f51dc3a4ae7811db7d0a)。本轮未合并或部署。
 
