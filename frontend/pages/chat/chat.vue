@@ -179,19 +179,30 @@ watch(isFresh, (fresh) => {
 
 /**
  * 输入框提示语。
- * 任务森林生成需要澄清时（generation.status = 'needs_clarification'），后端返回的 reply 里
- * 会要求「请回复“补充：你的答案”」且 buttons 为空 —— 这时直接把输入框切成补充模式，
- * 并给出模型到底在问什么（generation.question）。
+ *
+ * 澄清（范围补充）有两条来源，都要认：
+ *   1. 新主流程（PR #16 起默认走 /api/chat → 今日备忘录）：
+ *      待澄清项在 GET /api/today 的 clarifications[] 里，session.generation 是 null；
+ *   2. 旧单任务流程（workflow:'legacy'）：generation.status = 'needs_clarification'。
+ *
+ * 澄清的问题问的是「哪份作业、约定做几题」这类范围，不是要用户交答案或选项
+ * （后端 ACTION_SUPPORT_POLICY 明确不索要题目全文/答案），所以提示语只用「补充：」，
+ * 不写「写下你的答案」，免得用户以为要交作业。
  */
-const needsClarify = computed(
-	() => !!(session.generation && session.generation.status === 'needs_clarification')
-)
+const clarifyQuestion = computed(() => {
+	const first = today.firstClarification()
+	if (first && first.question) return first.question
+	const g = session.generation
+	if (g && g.status === 'needs_clarification' && g.question) return g.question
+	return ''
+})
+
+const needsClarify = computed(() => !!clarifyQuestion.value)
 
 const placeholder = computed(() => {
 	if (session.noteMode) return '记点什么…（走神的时候写下来）'
 	if (needsClarify.value) {
-		const q = session.generation && session.generation.question
-		return q ? '补充：' + q.slice(0, 24) + '…' : '补充：写下你的答案…'
+		return '补充：' + clarifyQuestion.value.slice(0, 24) + '…'
 	}
 	return '说点什么，或者点上面的一件小事…'
 })
@@ -347,14 +358,16 @@ async function onVoice() {
 	}
 }
 
-// 进入执行态就去单步页（策划书第二步到第四步的跳转）
+// 进入执行态就进专注模式。
+// ⚠️ 这里原本跳的是旧版「单步执行页」pages/focus/focus（策划书 F2 那一版），
+// 那一页不在 Figma 设计稿里，已经下线；专注现在只有 pages/focusmode 一个界面。
 watch(
 	() => session.navIntent,
 	(intent) => {
 		if (!intent) return
 		session.takeNavIntent()
 		if (intent === 'focus') {
-			uni.navigateTo({ url: '/pages/focus/focus' })
+			uni.navigateTo({ url: '/pages/focusmode/focusmode' })
 		}
 	}
 )

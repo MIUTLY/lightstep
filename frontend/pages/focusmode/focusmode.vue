@@ -15,45 +15,49 @@
 			</view>
 		</view>
 
-		<!-- 墙面区：任务名 + 三个竖向按钮 -->
+		<!-- 任务名（设计稿 x=246 y=132 宽309 55px 左对齐；换算成 rpx 见下方样式表） -->
 		<view class="wall">
 			<text class="task-title">{{ taskTitle }}</text>
+		</view>
 
-			<view v-if="currentStep" class="task-step">
-				<text>{{ currentStep }}</text>
+		<!-- 当前这一步：设计稿里没有这一段，按产品需要单独放在标题下方（居中、不参与按钮定位） -->
+		<view v-if="currentStep" class="task-step">
+			<text>{{ currentStep }}</text>
+		</view>
+
+		<!-- 待澄清提示：落位在设计稿标题与「完成了」之间的空档（y 230~406rpx），
+		     不压住三个按钮，也不用把下面的按钮往下推 -->
+		<view v-if="pendingQuestion" class="clarify-card">
+			<text class="clarify-text">{{ pendingQuestion }}</text>
+			<text class="clarify-hint">回上一页把范围补一句，再回来开专注。</text>
+		</view>
+
+		<!-- 三个操作按钮：绝对坐标照抄设计稿，不再靠上下 margin 堆叠 -->
+		<view class="pills">
+			<view class="pill pill-done" :class="{ disabled: today.busy || !hasFocus }" hover-class="pill-hover" @tap.stop="onDone">
+				<text class="pill-text pill-text-done">完成了</text>
 			</view>
-
-			<view v-if="pendingQuestion" class="clarify-card">
-				<text class="clarify-text">{{ pendingQuestion }}</text>
-				<text class="clarify-hint">点左侧便签或右下角小布，把范围告诉它。</text>
+			<view class="pill pill-heavier" :class="{ disabled: today.busy || !hasFocus }" hover-class="pill-hover" @tap.stop="onHeavier">
+				<text class="pill-text">重一点</text>
 			</view>
-
-			<!-- 设计稿顺序：完成了(宽) / 重一点 / 轻一点 -->
-			<view class="pills">
-				<view class="pill pill-done" :class="{ disabled: today.busy || !hasFocus }" hover-class="pill-hover" @tap.stop="onDone">
-					<text class="pill-text pill-text-done">完成了</text>
-				</view>
-				<view class="pill pill-slim" :class="{ disabled: today.busy || !hasFocus }" hover-class="pill-hover" @tap.stop="onHeavier">
-					<text class="pill-text">重一点</text>
-				</view>
-				<view class="pill pill-slim" :class="{ disabled: today.busy || !hasFocus }" hover-class="pill-hover" @tap.stop="onLighter">
-					<text class="pill-text">轻一点</text>
-				</view>
+			<view class="pill pill-lighter" :class="{ disabled: today.busy || !hasFocus }" hover-class="pill-hover" @tap.stop="onLighter">
+				<text class="pill-text">轻一点</text>
 			</view>
 		</view>
 
-		<!-- 左侧中部：粉色便签按钮（点它打开「思绪倾倒」）
-		     澄清态下先让位给问题卡片，避免和小步的提问叠在一起 -->
+		<!-- 左侧：粉红书本（设计稿 x=-14 y=583，274×131；左边故意出血到画布外）。
+		     点它打开「思绪倾倒」；澄清态先让位给上方的问题卡片 -->
 		<view v-if="!pendingQuestion" class="note-btn" hover-class="note-hover" @tap.stop="openThoughts">
-			<image class="note-img" src="/static/focus-book-1.png" mode="widthFix" />
+			<image class="note-img" src="/static/focus-book-1.png" mode="aspectFill" />
 		</view>
 
-		<!-- 右下角：站在地板上的小猫（它本身就是小布聊天入口） -->
-		<view class="floor-cat" hover-class="cat-hover" @tap.stop="toggleChat">
-			<image class="floor-cat-img" src="/static/focus-book-2.png" mode="widthFix" />
+		<!-- 右下角：地板上的小猫。设计稿里它是纯静态装饰，不是按钮，
+		     所以这里不加 hover-class、不绑 tap，只按设计稿的坐标和尺寸摆好。 -->
+		<view class="floor-cat">
+			<image class="floor-cat-img" src="/static/focus-book-2.png" mode="aspectFill" />
 		</view>
 
-		<!-- 底部：就到这儿吧 -->
+		<!-- 底部：就到这儿吧（设计稿距画布底边 152px ≈ 148rpx） -->
 		<view class="bottom">
 			<view class="pill pill-exit" hover-class="pill-hover" @tap.stop="onExit">
 				<text class="pill-text pill-text-exit">{{ exiting ? '正在收尾…' : '就到这儿吧' }}</text>
@@ -130,27 +134,31 @@
 
 <script setup>
 /**
- * 专注模式（按 Figma 设计稿还原）
+ * 专注模式（严格按 Figma 设计稿还原）
  *
- * 设计稿版式（fileKey a4LwTwEh3akDn7IkZygSh7 / node 0:1）：
- *   ┌─────────────────────────────┐
- *   │ [喇叭图标]                    │  ← 左上角 56×56
- *   │                                │
- *   │          打开单词书            │  ← 任务名 55px #5E5D62
- *   │        [  完成了  ]            │  ← 400×70
- *   │        [ 重一点 ]              │  ← 290×48
- *   │  [便签] [ 轻一点 ]             │  ← 290×48；便签在左侧中部，点它开思绪倾倒
- *   │                                │
- *   │              🐱(蹲在地板上)     │  ← 右下角
- *   │        [ 就到这儿吧 ]          │  ← 290×50
- *   └─────────────────────────────┘
+ * 设计稿：fileKey a4LwTwEh3akDn7IkZygSh7 / node 0:1，画布 768×1376（与 static/focus-bg.jpg 同尺寸）
+ * 换算规则：rpx = 设计稿 px × 750 ÷ 768（≈0.9766）。所有坐标都从画布左上角量起。
+ *
+ * 元素           设计稿 px (x,y,w,h)      → rpx
+ *   喇叭图标       54, 67, 56×56         → 53, 65, 55×55
+ *   任务名        246, 132, 309×81      → 240, 129, 302 宽 / 54rpx 左对齐
+ *   完成了        200, 426, 400×70      → 195, 416, 391×68
+ *   重一点        246, 556, 290×48      → 240, 543, 283×47
+ *   轻一点        246, 660, 290×48      → 240, 645, 283×47
+ *   粉红书本      -14, 583, 274×131     → -14, 569, 268×128（左边出血到画布外）
+ *   地板猫        364, 813, 404×375     → 右缘贴齐, 距底 184, 394×366（纯静态）
+ *   就到这儿吧    246, 1174, 290×50     → 240, 距底 148, 283×49
+ *
+ * 定位策略：上半部分（喇叭/标题/三个按钮/书本）用绝对坐标从画布顶边量起，
+ * 换行或澄清卡片都不会推动按钮；「地板猫」和「就到这儿吧」按设计稿与画布底边的
+ * 间距（188px / 152px）从底边锚定，这样换到不同高度的手机上不会浮在半空。
  *
  * 按钮规格：白底 rgba(255,255,255,.84)、边框 #F9E1C4 2px、圆角 47.5px、
  *          外发光 0 0 14.9px rgba(254,214,108,.6) + 内发光 inset 0 0 27.1px rgba(255,238,192,1)，
- *          文字 #5E5D62（就到这儿吧 #333333）。768px 设计宽 ≈ 750rpx。
+ *          文字 #5E5D62（就到这儿吧 #333333）。
  *
- * 交互：便签 → 思绪倾倒卡片；小布 → 聊天框（新增任务）；
- *      就到这儿吧 → 结束本轮 + 生成回执图 + 存进本地手账。
+ * 交互：书本 → 思绪倾倒卡片；就到这儿吧 → 结束本轮 + 生成回执图 + 存进本地手账。
+ *      地板猫在设计稿里只是画面的一部分（不是按钮），所以不绑任何点击/悬停。
  */
 import { computed, getCurrentInstance, nextTick, ref } from 'vue'
 import { onHide, onShow } from '@dcloudio/uni-app'
@@ -387,6 +395,13 @@ function pushMsg(role, text) {
 	})
 }
 
+/**
+ * 专注页内的「加一件 / 补范围」聊天框开关。
+ *
+ * ⚠️ 设计稿里地板猫只是画面的一部分，不是按钮 —— 按设计稿要求已经去掉猫的点击与悬停，
+ * 所以这个聊天框目前**没有入口**（保留实现，方便以后挂到别的位置，例如书本长按或顶部小图标）。
+ * 要恢复：把 @tap.stop="toggleChat"（和 hover-class）加回 .floor-cat 即可。
+ */
 function toggleChat() {
 	chatOpen.value = !chatOpen.value
 }
@@ -517,16 +532,14 @@ function backToMemo() {
 
 /* ---------- 左上角喇叭 ---------- */
 
+/* 左上角喇叭：设计稿 56×56 @ (54, 67) → 55×55 @ (53, 65) */
 .sound-btn {
 	position: absolute;
-	left: 40rpx;
-	top: 96rpx;
+	left: 53rpx;
+	top: 65rpx;
 	z-index: 5;
-	width: 96rpx;
-	height: 96rpx;
-	display: flex;
-	align-items: center;
-	justify-content: center;
+	width: 55rpx;
+	height: 55rpx;
 }
 
 .sound-hover {
@@ -536,8 +549,8 @@ function backToMemo() {
 /* 喇叭：一个方块 + 一个三角 + 两道弧 */
 .spk {
 	position: relative;
-	width: 56rpx;
-	height: 56rpx;
+	width: 55rpx;
+	height: 55rpx;
 }
 
 .spk-box {
@@ -591,30 +604,32 @@ function backToMemo() {
 
 /* ---------- 墙面内容 ---------- */
 
+/* 任务名：设计稿 x=246 y=132 宽309 高81，55px 左对齐
+   → left 240rpx / top 129rpx / width 302rpx / 54rpx / 行高 1.47（81÷55） */
 .wall {
 	position: absolute;
-	left: 0;
-	right: 0;
-	top: 230rpx;
+	left: 240rpx;
+	top: 129rpx;
+	width: 302rpx;
 	z-index: 3;
-	display: flex;
-	flex-direction: column;
-	align-items: center;
 }
 
 /* 任务名：设计稿 55px → 54rpx */
 .task-title {
+	display: block;
 	font-size: 54rpx;
-	line-height: 1.3;
-	text-align: center;
+	line-height: 1.47;
+	text-align: left;
 	color: #5e5d62;
 	letter-spacing: 2rpx;
 }
 
 .task-step {
-	margin-top: 14rpx;
-	max-width: 560rpx;
-	padding: 0 10rpx;
+	position: absolute;
+	left: 95rpx;
+	top: 220rpx;
+	width: 560rpx;
+	z-index: 3;
 }
 
 .task-step text {
@@ -622,11 +637,21 @@ function backToMemo() {
 	line-height: 1.6;
 	text-align: center;
 	color: #8b8891;
+	/* 后端会把父任务的当前动作明细用换行并进 current_step，保留换行 */
+	white-space: pre-line;
 }
 
+/* 待澄清卡片：设计稿没有这个元素，放进标题与「完成了」之间的空档
+   （129+79=208 之下，416 之上），不压按钮、也不把按钮往下挤 */
 .clarify-card {
-	margin-top: 20rpx;
+	position: absolute;
+	left: 115rpx;
+	top: 230rpx;
+	z-index: 3;
 	width: 520rpx;
+	max-height: 176rpx;
+	overflow: hidden;
+	box-sizing: border-box;
 	padding: 18rpx 22rpx;
 	border-radius: 20rpx;
 	background-color: rgba(255, 255, 255, 0.9);
@@ -651,11 +676,15 @@ function backToMemo() {
 
 /* ---------- 竖向三个胶囊 ---------- */
 
+/* 容器只做定位基准（高度 0）：三个按钮全部用设计稿绝对坐标，
+   这样标题换成两行、或出现澄清卡片时，按钮位置都不会被推动 */
 .pills {
-	margin-top: 44rpx;
-	display: flex;
-	flex-direction: column;
-	align-items: center;
+	position: absolute;
+	left: 0;
+	top: 416rpx;
+	width: 100%;
+	height: 0;
+	z-index: 2;
 }
 
 .pill {
@@ -669,17 +698,33 @@ function backToMemo() {
 	box-shadow: 0 0 15rpx rgba(254, 214, 108, 0.6), inset 0 0 26rpx rgba(255, 238, 192, 1);
 }
 
-/* 完成了：400×70 → 391×68 */
+/* 设计稿 → rpx（px × 750/768）：
+   完成了 200,426 400×70 → left 195 top   0 391×68
+   重一点 246,556 290×48 → left 240 top 127 283×47
+   轻一点 246,660 290×48 → left 240 top 229 283×47
+   （三个都用绝对坐标；「完成了」比下面两个右偏 9rpx 是设计稿本身的位置，照抄） */
 .pill-done {
+	position: absolute;
+	left: 195rpx;
+	top: 0;
 	width: 391rpx;
 	height: 68rpx;
 }
 
-/* 重一点 / 轻一点：290×48 → 283×47，间距按设计稿 */
-.pill-slim {
+.pill-heavier {
+	position: absolute;
+	left: 240rpx;
+	top: 127rpx;
 	width: 283rpx;
 	height: 47rpx;
-	margin-top: 24rpx;
+}
+
+.pill-lighter {
+	position: absolute;
+	left: 240rpx;
+	top: 229rpx;
+	width: 283rpx;
+	height: 47rpx;
 }
 
 .pill-hover {
@@ -701,12 +746,16 @@ function backToMemo() {
 
 /* ---------- 左侧中部：粉色便签（点开思绪倾倒） ---------- */
 
+/* 粉红书本：设计稿 274×131 @ (-14, 583) → 268×128 @ (-14, 569)
+   左边故意出血到画布外（设计稿就是负坐标），所以不要拿可视内容去猜尺寸：
+   PNG 里四周有透明留白，必须整块按 268×128 渲染才和设计稿对得上 */
 .note-btn {
 	position: absolute;
-	left: 92rpx;
-	top: 720rpx;
+	left: -14rpx;
+	top: 569rpx;
 	z-index: 4;
-	width: 96rpx;
+	width: 268rpx;
+	height: 128rpx;
 }
 
 .note-hover {
@@ -715,40 +764,36 @@ function backToMemo() {
 
 .note-img {
 	display: block;
-	width: 100%;
-	height: auto;
+	width: 268rpx;
+	height: 128rpx;
 }
 
-/* ---------- 右下角：站在地板上的小猫（点它开口聊天） ---------- */
-
+/* 地板上的小猫：设计稿 404×375 @ (364, 813) → 394×366，右边缘贴齐画布（right: 0），
+   距画布底边 188px → 184rpx。设计稿里它是静态装饰，所以这里没有任何点击态/悬停态 */
 .floor-cat {
 	position: absolute;
-	right: 16rpx;
-	bottom: 200rpx;
+	right: 0;
+	bottom: 184rpx;
 	z-index: 6;
-	width: 400rpx;
-}
-
-.cat-hover {
-	opacity: 0.86;
+	width: 394rpx;
+	height: 366rpx;
 }
 
 .floor-cat-img {
 	display: block;
-	width: 100%;
-	height: auto;
+	width: 394rpx;
+	height: 366rpx;
 }
 
 /* ---------- 底部：就到这儿吧 ---------- */
 
+/* 就到这儿吧：设计稿 290×50 @ (246, 1174)，距画布底边 152px → 148rpx；
+   底部按到画布底边的间距锚定，这样换到不同高度的手机上按钮不会浮在半空 */
 .bottom {
 	position: absolute;
-	left: 0;
-	right: 0;
-	bottom: calc(70rpx + env(safe-area-inset-bottom));
+	left: 240rpx;
+	bottom: calc(148rpx + env(safe-area-inset-bottom));
 	z-index: 5;
-	display: flex;
-	justify-content: center;
 }
 
 /* 290×50 → 283×49 */

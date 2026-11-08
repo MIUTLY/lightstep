@@ -3,6 +3,15 @@
  *
  * 对齐的是 MIUTLY/lightstep 仓库 2026-11-07 之后的 backend/（含 PR #8 五分钟/十分钟预约）。
  *
+ * ⚠️ 2026-11-08 后端升级到 main@0f2e84e7（PR #17「对外文案过滤」+「只记录行动进度、不验收成果」）：
+ *   - 展示字段（reply / current_step / question / summary / feedback / title / scope）已由后端统一过滤，
+ *     「（本次对话：…）」「（内部备注：…）」这类内部说明不会再下发；前端不要自己再删一遍，
+ *     也不要用完整父标题去重建任务文案。
+ *   - 父任务的 current_step 会把动作明细并进同一字段，用 **换行** 分隔
+ *     （「洗衣服\n放入衣物；加洗衣液」），渲染时必须保留换行。
+ *   - 拆分只记录用户自报进度，不检查正确率/不要求留证或交答案；界面不要出现「上传 / 验收 / 正确率」。
+ *   - 结构、字段名、接口参数均未变化。
+ *
  * 统一约定
  * ---------
  * - 写操作一律 POST + JSON body，读操作一律 GET + query。
@@ -128,7 +137,8 @@ export function pollReminders(user_id) {
 /**
  * 直接生成任务（任务森林）——与 /api/chat 走同一套 _create_task，只是入口更明确。
  * 返回的 Reply 里会带 generation：status 可能是 succeeded / needs_clarification / failed。
- * 注意 needs_clarification 时 **buttons 是空数组**，只能靠用户回「补充：答案」（走 /api/chat）。
+ * 注意 needs_clarification 时 **buttons 是空数组**，只能靠用户回「补充：…」（走 /api/chat）。
+ * 澄清问的是范围（哪份作业、做成几题），不是要答案或选项——别在 UI 上写成「交答案」。
  */
 export function generateTask(user_id, goal) {
 	return post('/api/task/generate', { user_id, goal })

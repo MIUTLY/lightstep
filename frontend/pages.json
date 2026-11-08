@@ -13,14 +13,6 @@
 			}
 		},
 		{
-			"path": "pages/focus/focus",
-			"style": {
-				"navigationStyle": "custom",
-				"disableScroll": true,
-				"navigationBarTitleText": "这一步"
-			}
-		},
-		{
 			"path": "pages/focusmode/focusmode",
 			"style": {
 				"navigationStyle": "custom",
