@@ -114,6 +114,7 @@
 			<SideDrawer ref="drawer" :edge-handle="false" current="chat" />
 
 			<SoftLine :text="recallText" />
+            <FocusReceiptDialog :round="pendingReceiptRound" :flow="focusFlow" @closed="closeReceiptDialog" />
 		</view>
 	</view>
 </template>
@@ -140,6 +141,8 @@ import CatBuddy from '@/components/CatBuddy.vue'
 import ChatBubble from '@/components/ChatBubble.vue'
 import SoftLine from '@/components/SoftLine.vue'
 import SideDrawer from '@/components/SideDrawer.vue'
+import FocusReceiptDialog from '@/components/FocusReceiptDialog.vue'
+import { createFocusFlow } from '@/utils/focusFlow.js'
 
 import { useSession } from '@/store/session.js'
 import { useSettings } from '@/store/settings.js'
@@ -153,6 +156,11 @@ const session = useSession()
 const settings = useSettings()
 const today = useToday()
 const user = useUser()
+const focusFlow = createFocusFlow({ today, userId: () => user.current() })
+const pendingReceiptRound = ref(null)
+let receiptPageVisible = false
+function refreshReceiptDialog() { pendingReceiptRound.value = focusFlow.pending() }
+function closeReceiptDialog() { pendingReceiptRound.value = null }
 
 /** custom 导航栏：自己让出状态栏高度（刘海屏） */
 const statusBarStyle = 'height:' + getStatusBarHeight() + 'px;'
@@ -254,6 +262,7 @@ const {
 })
 
 onShow(async () => {
+    receiptPageVisible = true
 	settings.load()
 	user.ensure()
 
@@ -268,10 +277,19 @@ onShow(async () => {
 	scrollToBottom()
 	resumeRecall()
 	// 今日清单 / 专注状态可能是从备忘录页改过的，回来时对齐一次
-	today.load()
+    const view = await today.load()
+    if (receiptPageVisible && view && !today.hasFocus()) {
+        try {
+            const receipts = (today.events || []).filter(e => e.kind === 'receipt')
+            focusFlow.recover(receipts, false)
+            refreshReceiptDialog()
+            for (const receipt of receipts) await today.ack(receipt.id)
+        } catch (e) { uni.showToast({ title: e.message || '回执暂时未能打开，请重试', icon: 'none' }) }
+    }
 })
 
 onHide(() => {
+    receiptPageVisible = false
 	stopRecall()
 })
 

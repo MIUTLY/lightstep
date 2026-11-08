@@ -104,6 +104,11 @@ export const useToday = defineStore('today', {
 		/** 把后端返回的清单视图整块覆盖进来（低 revision 不覆盖高 revision） */
 		function apply(view) {
 			if (!view || typeof view !== 'object') return
+			if (view.capture && !('items' in view)) {
+				state.operation = view.operation || null
+				if (typeof view.revision === 'number') state.revision = Math.max(state.revision, view.revision)
+				return
+			}
 			if (typeof view.revision === 'number' && view.revision < state.revision) return
 			state.state = view.state || 'memo'
 			if (typeof view.revision === 'number') state.revision = view.revision
@@ -135,6 +140,7 @@ export const useToday = defineStore('today', {
 			try {
 				const view = await fn()
 				apply(view)
+                if (view?.operation?.status === 'failed') state.lastError = view.operation.error?.message || view.reply || '这次操作未成功，请重试'
 				return view
 			} catch (e) {
 				state.lastError = (e && e.message) || '没连上，等会儿再试'
@@ -143,6 +149,17 @@ export const useToday = defineStore('today', {
 				state.busy = false
 			}
 		}
+
+        // Persist an operation ID before sending; a lost response retries the same mutation.
+        function mutation(action, values) {
+            const signature = JSON.stringify({ action, ...values, intent_revision: action === 'select' ? state.revision : undefined })
+            const key = 'lightstep_focus_mutation_' + uid() + '_' + action
+            const raw = uni.getStorageSync(key)
+            const old = raw ? JSON.parse(raw) : null
+            const request_id = old && old.signature === signature ? old.id : newRequestId()
+            uni.setStorageSync(key, JSON.stringify({ signature, id: request_id }))
+            return api.todayCommand({ user_id: uid(), request_id, action, ...values })
+        }
 
 		return {
 			/** 读清单（可选指定某天的保留清单） */
@@ -181,15 +198,10 @@ export const useToday = defineStore('today', {
 			 * 返回 needs_clarification 时，用 answer 再调一次（新的 request_id）。
 			 */
 			async select(itemId, answer) {
-				const payload = {
-					user_id: uid(),
-					request_id: newRequestId(),
-					action: 'select',
-					item_id: itemId
-				}
-				if (answer) payload.answer = String(answer).trim()
-				return wrap(() => api.todayCommand(payload))
-			},
+                const values = { item_id: itemId }
+                if (answer) values.answer = String(answer).trim()
+                return wrap(() => mutation('select', values))
+            },
 
 			/**
 			 * 调整顺序。
@@ -212,18 +224,11 @@ export const useToday = defineStore('today', {
 
 			/** 完成当前展示范围（整项完成才会把清单项划掉） */
 			async complete(stepId) {
-				const f = state.focus
-				if (!f) return null
-				return wrap(() =>
-					api.todayCommand({
-						user_id: uid(),
-						request_id: newRequestId(),
-						action: 'complete',
-						session_id: f.session_id,
-						step_id: stepId || (f.step && f.step.step_id)
-					})
-				)
-			},
+                const f = state.focus
+                if (!f) return null
+                return wrap(() => mutation('complete', { session_id: f.session_id,
+                    step_id: stepId || (f.step && f.step.step_id) }))
+            },
 
 			/** 轻一点 / 重一点 */
 			async resize(direction, stepId) {
@@ -243,17 +248,10 @@ export const useToday = defineStore('today', {
 
 			/** 中途结束本轮（保留森林与进度，回备忘录） */
 			async end() {
-				const f = state.focus
-				if (!f) return null
-				return wrap(() =>
-					api.todayCommand({
-						user_id: uid(),
-						request_id: newRequestId(),
-						action: 'end',
-						session_id: f.session_id
-					})
-				)
-			},
+                const f = state.focus
+                if (!f) return null
+                return wrap(() => mutation('end', { session_id: f.session_id }))
+            },
 
 			/** 专注页里新增任务（右下角小布那种入口） */
 			async capture(text) {
@@ -288,6 +286,7 @@ export const useToday = defineStore('today', {
 						event_id: eventId
 					})
 				)
+				if (!view || view.operation?.status !== 'succeeded') return view
 				acked.push(eventId)
 				writeAcked(acked)
 				return view

@@ -34,16 +34,21 @@
 
 		<!-- 三个操作按钮：绝对坐标照抄设计稿，不再靠上下 margin 堆叠 -->
 		<view class="pills">
-			<view class="pill pill-done" :class="{ disabled: today.busy || !hasFocus }" hover-class="pill-hover" @tap.stop="onDone">
+			<view class="pill pill-done" :class="{ disabled: today.busy || transitionBusy || !hasFocus }" hover-class="pill-hover" @tap.stop="onDone">
 				<text class="pill-text pill-text-done">完成了</text>
 			</view>
-			<view class="pill pill-heavier" :class="{ disabled: today.busy || !hasFocus }" hover-class="pill-hover" @tap.stop="onHeavier">
+			<view class="pill pill-heavier" :class="{ disabled: today.busy || transitionBusy || !hasFocus }" hover-class="pill-hover" @tap.stop="onHeavier">
 				<text class="pill-text">重一点</text>
 			</view>
-			<view class="pill pill-lighter" :class="{ disabled: today.busy || !hasFocus }" hover-class="pill-hover" @tap.stop="onLighter">
+			<view class="pill pill-lighter" :class="{ disabled: today.busy || transitionBusy || !hasFocus }" hover-class="pill-hover" @tap.stop="onLighter">
 				<text class="pill-text">轻一点</text>
 			</view>
 		</view>
+
+        <view v-if="retryNextId" class="clarify-card">
+            <text>上一项已完成，下一项暂时没能开始。进度已保留。</text>
+            <view @tap.stop="retryNextTask"><text>重试下一项</text></view>
+        </view>
 
 		<!-- 左侧：粉红书本（设计稿 x=-14 y=583，274×131；左边故意出血到画布外）。
 		     点它打开「思绪倾倒」；澄清态先让位给上方的问题卡片 -->
@@ -126,10 +131,6 @@
 			</view>
 		</view>
 
-		<!-- 离屏 canvas：生成回执图用 -->
-		<canvas canvas-id="focusReceipt" :style="canvasStyle" />
-
-		<SoftLine :text="recallText" />
 	</view>
 </template>
 
@@ -158,37 +159,33 @@
  *          外发光 0 0 14.9px rgba(254,214,108,.6) + 内发光 inset 0 0 27.1px rgba(255,238,192,1)，
  *          文字 #5E5D62（就到这儿吧 #333333）。
  *
- * 交互：书本 → 思绪倾倒卡片；就到这儿吧 → 结束本轮 + 生成回执图 + 存进本地手账。
+ * 交互：书本 → 思绪倾倒卡片；就到这儿吧 → 成功结束后回对话页弹回执，用户填写并主动保存。
  *      地板猫在设计稿里只是画面的一部分（不是按钮），所以不绑任何点击/悬停。
  */
-import { computed, getCurrentInstance, nextTick, ref } from 'vue'
+import { computed, nextTick, ref } from 'vue'
 import { onHide, onShow } from '@dcloudio/uni-app'
 
-import SoftLine from '@/components/SoftLine.vue'
 import { useSettings } from '@/store/settings.js'
 import { useToday } from '@/store/today.js'
-import { useSoftRecall } from '@/composables/useSoftRecall.js'
-import { addEntry, persistImage } from '@/utils/localJournal.js'
-import { todayCN } from '@/utils/format.js'
-import { RECEIPT_H, RECEIPT_W, drawArtReceipt, drawReceipt, exportCanvasTempPath } from '@/utils/receipt.js'
+import { useUser } from '@/store/user.js'
+import { createFocusFlow } from '@/utils/focusFlow.js'
 import {
-	downloadAsset,
 	idlePetUrl,
 	idleTimeoutSeconds,
-	lastReceiptEvent,
 	loadManifest,
-	petImageUrl,
-	receiptArt
+	petImageUrl
 } from '@/utils/presentation.js'
 import { getStatusBarHeight } from '@/utils/systemInfo.js'
 
 const settings = useSettings()
 const today = useToday()
-const instance = getCurrentInstance()
+const flow = createFocusFlow({ today, userId: () => useUser().current() })
+const transitionBusy = ref(false)
+const retryNextId = ref('')
+let pageVisible = true
 
 const themeClass = computed(() => (settings.sensory ? 'theme-sensory' : ''))
 const statusBarStyle = 'height:' + getStatusBarHeight() + 'px;'
-const canvasStyle = 'position:fixed;left:-2000px;top:0;width:' + RECEIPT_W + 'px;height:' + RECEIPT_H + 'px;'
 
 /* ---------------- 任务内容 ---------------- */
 
@@ -212,7 +209,7 @@ const taskTitle = computed(() => {
 		const item = today.items.find((x) => x.id === today.pendingSelect.itemId)
 		if (item) return item.title
 	}
-	return '打开单词书'
+	return '正在恢复任务…'
 })
 
 /**
@@ -303,32 +300,39 @@ function onPetTap() {
 /* ---------------- 进页面自动开一项 ---------------- */
 
 onShow(async () => {
+    pageVisible = true
 	settings.load()
-	resumeRecall()
+    if (transitionBusy.value || today.busy) return
 	loadManifest().then((m) => {
 		if (m) manifest.value = m
 	})
 	if (!today.loaded) await today.load()
-	if (today.hasFocus() || today.pendingSelect) return
+	if (today.hasFocus()) { flow.begin(); scheduleIdleTimer(); return }
+	if (today.pendingSelect || today.hasClarifications()) { backToChat(); return }
+    if (flow.pending() || (today.events || []).some(e => e.kind === 'receipt' && e.outcome === 'interrupted')) {
+        flow.recover(today.events, false); backToChat(); return
+    }
 	// 还有没澄清完的任务时不要抢着开专注（后端 can_enter_focus=false）
 	if (today.canEnterFocus === false || today.hasClarifications()) return
 
 	const id = today.suggestedItemId || (today.items[0] && today.items[0].id)
-	if (!id) return
+	if (!id) { backToChat(); return }
 	const view = await today.select(id)
-	if (!view) return
+	if (!view) { backToChat(); return }
 	const status = view.operation && view.operation.status
 	if (status === 'needs_clarification') {
 		const first = today.firstClarification()
 		today.pendingSelect = { itemId: id, question: (first && first.question) || view.reply || '还需要补充一点信息' }
+        backToChat(); return
 	} else if (status === 'failed') {
 		uni.showToast({ title: (view.operation.error && view.operation.error.message) || '没能开始', icon: 'none' })
+        backToChat(); return
 	}
 	scheduleIdleTimer()
 })
 
 onHide(() => {
-	stopRecall()
+    pageVisible = false
 	// 退到后台就取消计时（协议：on_background=cancel），回来重新等满 300 秒
 	clearIdleTimer()
 	idleNow.value = false
@@ -344,22 +348,43 @@ function onSound() {
 /* ---------------- 三个按钮 ---------------- */
 
 async function onDone() {
-	if (today.busy || !hasFocus.value) return
-	noteActivity()
-	const stepId = today.focus && today.focus.step && today.focus.step.step_id
-	await today.complete(stepId)
-	await handleEvents()
-	if (!today.hasFocus()) uni.showToast({ title: '这一项做完了', icon: 'none' })
+    if (transitionBusy.value || today.busy || !hasFocus.value) return
+    transitionBusy.value = true; noteActivity()
+    try { await handleTransition(await flow.complete()) }
+    catch (e) {
+        if (!today.hasFocus()) retryNextId.value = today.suggestedItemId || ''
+        uni.showToast({ title: e.message || '没能继续，请重试', icon: 'none' })
+    }
+    finally { transitionBusy.value = false }
+}
+async function handleTransition(result) {
+    if (result.status === 'next_failed') {
+        retryNextId.value = result.nextItemId
+        uni.showToast({ title: today.lastError || '下一项未开始，点重试继续', icon: 'none' })
+    } else if (result.status === 'finished' || result.status === 'clarification') {
+        retryNextId.value = ''; backToChat()
+    } else if (result.status === 'executing') {
+        retryNextId.value = ''; scheduleIdleTimer()
+    } else if (result.status === 'failed') {
+        uni.showToast({ title: today.lastError || '这次没成功，请重试', icon: 'none' })
+    }
+}
+async function retryNextTask() {
+    if (transitionBusy.value || !retryNextId.value) return
+    transitionBusy.value = true
+    try { await handleTransition(await flow.retryNext(retryNextId.value)) }
+    catch (e) { uni.showToast({ title: e.message, icon: 'none' }) }
+    finally { transitionBusy.value = false }
 }
 
 async function onLighter() {
-	if (today.busy || !hasFocus.value) return
+	if (today.busy || transitionBusy || !hasFocus.value) return
 	noteActivity()
 	await today.resize('smaller')
 }
 
 async function onHeavier() {
-	if (today.busy || !hasFocus.value) return
+	if (today.busy || transitionBusy || !hasFocus.value) return
 	noteActivity()
 	await today.resize('bigger')
 }
@@ -369,128 +394,11 @@ async function onHeavier() {
 const exiting = ref(false)
 
 async function onExit() {
-	if (exiting.value) return
-	exiting.value = true
-	const steps = doneCount.value
-	const title = today.focus ? today.focus.title : ''
-	noteActivity()
-
-	try {
-		// 收尾前先记下「该印哪张票根、印哪天」：receipt 事件里有 presentation 与 occurred_date
-		let receiptEvent = null
-		if (today.hasFocus()) {
-			await today.end()
-			receiptEvent = lastReceiptEvent(today.events)
-			await handleEvents()
-		}
-
-		let imagePath = ''
-		try {
-			await renderReceipt(title, steps, receiptEvent)
-			const tempPath = await exportCanvasTempPath('focusReceipt', instance.proxy)
-			imagePath = await persistImage(tempPath)
-		} catch (e) {
-			imagePath = ''
-		}
-
-		const saved = addEntry({
-			note: '',
-			steps_done: steps,
-			titles: title ? [title] : [],
-			imagePath,
-			// 手账归档按实际结束日（跨天退出时不能算成今天的页）
-			occurred_date: (receiptEvent && receiptEvent.occurred_date) || ''
-		})
-		if (!saved) {
-			// 本地存储写失败：如实说没存上，不能假装成功
-			uni.showToast({ title: '这次没存进手账（本地存储写入失败）', icon: 'none' })
-		} else if (!imagePath) {
-			uni.showToast({ title: '记下了（回执图没存上）', icon: 'none' })
-		} else {
-			uni.showToast({ title: '存进手账了', icon: 'none' })
-		}
-	} finally {
-		exiting.value = false
-		backToMemo()
-	}
-}
-
-/** 后端票根素材是否可用（available + 有 url） */
-function artOfReceiptEvent(receiptEvent) {
-	if (!receiptEvent) return null
-	const art = receiptArt(receiptEvent.presentation)
-	return art && art.id ? art : null
-}
-
-/**
- * 画这次的回执：
- *   - 有后端票根素材 → 用素材合成（底图 + 覆盖旧日期 + 真实日期 + 用户文字）
- *   - 没素材 / 下载失败 → 回落到原来那张整张自绘票根，不能因为图挂了就不存
- */
-function renderReceipt(title, steps, receiptEvent) {
-	const art = artOfReceiptEvent(receiptEvent)
-	if (art) {
-		return downloadAsset(art.url).then((localPath) => {
-			if (!localPath) return renderLocalReceipt(title, steps)
-			return new Promise((resolve) => {
-				nextTick(() => {
-					const ctx = uni.createCanvasContext('focusReceipt', instance.proxy)
-					drawArtReceipt(
-						ctx,
-						{
-							imagePath: localPath,
-							composition: art.composition,
-							dateText: formatOccurred(receiptEvent.occurred_date),
-							line: title ? '这次做到「' + title + '」' : '这次就到这儿。',
-							sensory: settings.sensory
-						},
-						resolve
-					)
-				})
-			})
-		})
-	}
-	return renderLocalReceipt(title, steps)
-}
-
-/** '2026-11-08' → '2026.11.08'（票根右下角印法） */
-function formatOccurred(dateStr) {
-	const raw = String(dateStr || '').trim()
-	if (/^\d{4}-\d{2}-\d{2}$/.test(raw)) return raw.replace(/-/g, '.')
-	return todayCN()
-}
-
-function renderLocalReceipt(title, steps) {
-	return new Promise((resolve, reject) => {
-		uni.getImageInfo({
-			src: '/static/xiaobu.png',
-			success: (info) => {
-				nextTick(() => {
-					const ctx = uni.createCanvasContext('focusReceipt', instance.proxy)
-					drawReceipt(
-						ctx,
-						{
-							steps: steps || 0,
-							line: title ? '这次做到「' + title + '」' : '这次就到这儿。',
-							date: todayCN(),
-							sensory: settings.sensory,
-							catImagePath: info.path || ''
-						},
-						resolve
-					)
-				})
-			},
-			fail: () => reject(new Error('拿不到小猫图'))
-		})
-	})
-}
-
-async function handleEvents() {
-	for (const e of today.events || []) {
-		if (!e || !e.id) continue
-		if (today.isAcked(e.id)) continue
-		await today.ack(e.id)
-	}
+    if (exiting.value || transitionBusy.value || today.busy) return
+    exiting.value = true; noteActivity()
+    try { await handleTransition(await flow.end()) }
+    catch (e) { uni.showToast({ title: e.message || '没能结束，请重试', icon: 'none' }) }
+    finally { exiting.value = false }
 }
 
 /* ---------------- 思绪倾倒 ---------------- */
@@ -641,23 +549,15 @@ async function sendChat() {
 
 /* ---------------- 召回 / 返回 ---------------- */
 
-const {
-	text: recallText,
-	poke: pokeRecall,
-	resume: resumeRecall,
-	stop: stopRecall
-} = useSoftRecall({ enabled: () => !settings.dnd })
-
 function onUserTouch() {
-	pokeRecall()
 	// 触摸也算「人还在」：走神图恢复正常猫，空闲计时重新开始
 	noteActivity()
 }
 
-function backToMemo() {
-	const pages = getCurrentPages()
-	if (pages && pages.length > 1) uni.navigateBack({ delta: 1 })
-	else uni.reLaunch({ url: '/pages/memo/memo' })
+function backToChat() {
+    if (!pageVisible) return
+    clearIdleTimer()
+    uni.reLaunch({ url: '/pages/chat/chat' })
 }
 </script>
 

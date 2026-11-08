@@ -25,15 +25,16 @@ import { todayCN } from '@/utils/format.js'
 
 const STORAGE_KEY = 'lightstep_local_journal'
 /** 手帐最多保留多少条（防止无限膨胀；产品不统计，所以不做提示） */
-const MAX_ENTRIES = 500
+// Retain every saved page; storage failures are reported instead of silently evicting older pages.
 
-function readAll() {
+function readAll(strict = false) {
 	try {
 		const raw = uni.getStorageSync(STORAGE_KEY)
 		if (!raw) return []
 		const list = typeof raw === 'string' ? JSON.parse(raw) : raw
 		return Array.isArray(list) ? list : []
 	} catch (e) {
+        if (strict) throw new Error('手帐记录无法读取，请先保留现有数据')
 		return []
 	}
 }
@@ -67,8 +68,11 @@ export function listEntries() {
  */
 export function addEntry(entry = {}) {
 	const occurred = String(entry.occurred_date || '').trim()
+	let existing
+    try { existing = readAll(true) } catch (e) { return null }
+	if (entry.id && existing.some(x => x.id === entry.id)) return existing.find(x => x.id === entry.id)
 	const record = {
-		id: nextId(),
+		id: entry.id || nextId(),
 		// date 仍是「清单归属日」，occurred_date 是实际结束日（跨天时两者不同）
 		date: entry.date || (occurred ? occurred : todayCN().replace(/\./g, '-')),
 		occurred_date: occurred || entry.date || todayCN().replace(/\./g, '-'),
@@ -76,11 +80,12 @@ export function addEntry(entry = {}) {
 		titles: Array.isArray(entry.titles) ? entry.titles : [],
 		note: String(entry.note || '').trim(),
 		created_at: new Date().toISOString().slice(0, 19),
-		imagePath: entry.imagePath || ''
+		imagePath: entry.imagePath || '',
+        receipt_event_ids: Array.isArray(entry.receipt_event_ids) ? entry.receipt_event_ids : []
 	}
-	const list = readAll()
+	const list = existing
 	list.unshift(record)
-	if (!writeAll(list.slice(0, MAX_ENTRIES))) return null
+	if (!writeAll(list)) return null
 	return record
 }
 
@@ -133,4 +138,16 @@ export function persistImage(tempFilePath) {
 		}
 		resolve('')
 	})
+}
+
+/** Remove an unindexed image created by a failed save attempt; never delete existing pages. */
+export function discardImage(path) {
+ if (!path) return Promise.resolve()
+ return new Promise(resolve => {
+  try {
+   const fs = uni.getFileSystemManager && uni.getFileSystemManager()
+   if (fs && fs.unlink) { fs.unlink({ filePath: path, success: resolve, fail: resolve }); return }
+  } catch (e) { /* cleanup is best effort */ }
+  resolve()
+ })
 }
