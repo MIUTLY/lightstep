@@ -1,5 +1,6 @@
 """Real adapter + HTTP/storage regression, isolated transport only. No live AI claims."""
 import json
+from itertools import cycle
 import os
 from pathlib import Path
 import tempfile
@@ -37,6 +38,8 @@ def forest(goal="洗衣服"):
 
 class AIGenerationTests(unittest.TestCase):
     def setUp(self):
+        sleep_patch = patch("app.llm.sleep", return_value=None)
+        sleep_patch.start(); self.addCleanup(sleep_patch.stop)
         self.tmp = tempfile.TemporaryDirectory(prefix="lightstep-ai-generation-")
         self.path = str(Path(self.tmp.name) / "test.db")
         self.db = DB(self.path)
@@ -102,7 +105,7 @@ class AIGenerationTests(unittest.TestCase):
 
     def test_structurally_valid_wrong_goal_is_rejected_by_review(self):
         reject = dict(ACCEPT, decision='reject', relevant=False, coverage=False)
-        with patch.object(self.ai, '_chat', side_effect=[json.dumps(forest('整理桌面')), json.dumps(reject)]) as remote:
+        with patch.object(self.ai, '_chat', side_effect=cycle([json.dumps(forest('整理桌面')), json.dumps(reject)])) as remote:
             result = self.post('chat', message='洗衣服')
         self.assertEqual(result['generation']['error']['code'], 'AI_CONTENT_INVALID')
         review_data = json.loads(remote.call_args_list[1].args[1])
@@ -114,14 +117,14 @@ class AIGenerationTests(unittest.TestCase):
         responses = [['no JSON'], ['[]'], ['{"fine":["桌面"]}'],
                      [json.dumps(forest()), '{}'], [json.dumps(forest()), json.dumps(dict(ACCEPT, coverage='yes'))]]
         for sequence in responses:
-            with self.subTest(sequence=sequence), patch.object(self.ai, '_chat', side_effect=sequence):
+            with self.subTest(sequence=sequence), patch.object(self.ai, '_chat', side_effect=cycle(sequence)):
                 result = self.post('chat', message='洗衣服')
             self.assertEqual(result['generation']['error']['code'], 'AI_INVALID_RESPONSE')
             self.assertIsNone(self.db.get_active_task(self.uid))
 
     def test_each_semantic_check_must_pass(self):
         for field in ('relevant', 'coverage', 'parent_child_consistent', 'no_duplicates'):
-            with patch.object(self.ai, '_chat', side_effect=[json.dumps(forest()), json.dumps(dict(ACCEPT, **{field: False}))]):
+            with patch.object(self.ai, '_chat', side_effect=cycle([json.dumps(forest()), json.dumps(dict(ACCEPT, **{field: False}))])):
                 result = self.post('chat', message='洗衣服')
             self.assertEqual(result['generation']['error']['code'], 'AI_CONTENT_INVALID')
             self.assertIsNone(self.db.get_active_task(self.uid))

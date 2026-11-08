@@ -84,6 +84,7 @@ export function receiptArt(presentation) {
 	if (!receipt || !receipt.url) return null
 	return {
 		id: receipt.id || '',
+        width: receipt.width, height: receipt.height,
 		url: assetUrl(receipt.url),
 		previewUrl: receipt.preview && receipt.preview.url ? assetUrl(receipt.preview.url) : assetUrl(receipt.url),
 		composition: receipt.composition || null

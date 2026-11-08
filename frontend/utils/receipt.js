@@ -194,8 +194,12 @@ export function drawReceipt(ctx, options, done) {
 	const written = String(opts.line || '').trim()
 	if (written) {
 		ctx.setFillStyle(c.inkSoft)
-		ctx.setFontSize(24)
-		ctx.fillText(written.slice(0, 18), centerX, 648)
+        let size = 24
+        let rows = wrapByWidth(written, RECEIPT_W - 240, size)
+        while (rows.length > 3 && size > 12) { size -= 2; rows = wrapByWidth(written, RECEIPT_W - 240, size) }
+        if (rows.length > 3) throw new Error('文字超出票根区域，请缩短后再保存')
+        ctx.setFontSize(size)
+        rows.forEach((row, i) => ctx.fillText(row, centerX, 648 + i * 52))
 	}
 
 	// 日期
@@ -237,6 +241,8 @@ export function drawArtReceipt(ctx, options, done) {
 	const space = Array.isArray(comp.coordinate_space) ? comp.coordinate_space : [1696, 2528]
 	const sx = RECEIPT_W / (Number(space[0]) || 1696)
 	const sy = RECEIPT_H / (Number(space[1]) || 2528)
+    const sourceSx = (Number(opts.imageWidth) || Number(space[0]) || 1696) / (Number(space[0]) || 1696)
+    const sourceSy = (Number(opts.imageHeight) || Number(space[1]) || 2528) / (Number(space[1]) || 2528)
 	const box = (b) => ({
 		x: (b && Number(b.x)) || 0,
 		y: (b && Number(b.y)) || 0,
@@ -252,7 +258,7 @@ export function drawArtReceipt(ctx, options, done) {
 	try {
 		ctx.drawImage(opts.imagePath, 0, 0, RECEIPT_W, RECEIPT_H)
 	} catch (e) {
-		/* 交给调用方回落 */
+		throw new Error('票根底图绘制失败，请重试')
 	}
 
 	// 2. 盖掉印死的旧日期，再写真实日期
@@ -263,16 +269,16 @@ export function drawArtReceipt(ctx, options, done) {
 		try {
 			ctx.drawImage(
 				opts.imagePath,
-				patch.x * sx, patch.y * sy, patch.w * sx, patch.h * sy,
+				patch.x * sourceSx, patch.y * sourceSy, patch.w * sourceSx, patch.h * sourceSy,
 				cover.x * sx, cover.y * sy, cover.w * sx, cover.h * sy
 			)
 		} catch (e) {
-			/* 旧 canvas 不支持九参数 drawImage 时跳过覆盖，至少还能写日期 */
+			throw new Error('当前绘图环境不能替换旧日期，请重试或更新微信')
 		}
 	}
 	if (opts.dateText && dateBox.w) {
 		ctx.setFillStyle('#5a544c')
-		ctx.setFontSize(Math.max(12, Math.round(dateBox.h * 0.45)))
+		ctx.setFontSize(Math.max(10, Math.round(dateBox.h * sy * 0.45)))
 		ctx.setTextAlign('center')
 		ctx.fillText(
 			String(opts.dateText),
@@ -296,10 +302,11 @@ export function drawArtReceipt(ctx, options, done) {
 			if (lines.length * size * 1.5 <= maxH || size <= 12) break
 			size -= 2
 		}
+		if (lines.length * size * 1.5 > maxH) throw new Error('文字超出票根区域，请缩短后再保存')
 		ctx.setFillStyle('#3d3d3d')
 		ctx.setFontSize(size)
 		ctx.setTextAlign('left')
-		const startY = (textBox.y + size) * sy
+		const startY = textBox.y * sy + size
 		lines.forEach((line, i) => {
 			ctx.fillText(line, textBox.x * sx, startY + i * size * 1.5)
 		})

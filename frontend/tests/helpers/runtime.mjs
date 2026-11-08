@@ -6,7 +6,7 @@ import vm from 'node:vm'
 const root = fileURLToPath(new URL('../../', import.meta.url))
 
 /** 加载实际模块，只替换平台边界；不安装或冒充微信/Vue编译器。 */
-export async function loadFrontend(entry, { mocks = {}, globals = {} } = {}) {
+export async function loadFrontend(entry, { mocks = {}, globals = {}, expose = [] } = {}) {
 	const context = vm.createContext({ console, setInterval, clearInterval, ...globals })
 	const modules = new Map()
 	function moduleFor(specifier, parent = root + '/entry.js') {
@@ -21,7 +21,10 @@ export async function loadFrontend(entry, { mocks = {}, globals = {} } = {}) {
 			}, { context, identifier: path })
 		} else {
 			let source = readFileSync(path, 'utf8')
-			if (path.endsWith('.vue')) source = source.match(/<script setup>([\s\S]*?)<\/script>/)[1]
+			if (path.endsWith('.vue')) {
+                source = source.match(/<script setup>([\s\S]*?)<\/script>/)[1]
+                if (path === resolve(root, entry) && expose.length) source += '\nexport { ' + expose.join(',') + ' }\n'
+            }
 			module = new vm.SourceTextModule(source, { context, identifier: path })
 		}
 		modules.set(path, module)
