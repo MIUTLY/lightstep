@@ -29,3 +29,6 @@ unpackage/
 .vite/
 coverage/
 project.private.config.json
+
+# Supplied high-resolution receipt source archive is delivered separately; runtime images are committed.
+backend/assets/originals/receipts.zip

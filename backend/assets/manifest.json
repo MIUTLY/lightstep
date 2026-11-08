@@ -1,0 +1,688 @@
+{
+  "version": "2026-11-08-v1",
+  "pets": {
+    "initial": {
+      "url": "/api/assets/v1/pets/initial-f4a1fd2f5ef0.png",
+      "width": 512,
+      "height": 476,
+      "bytes": 78359,
+      "sha256": "f4a1fd2f5ef0c7d7ff139002df2440136c2ceb91200e2ee5aa82bb45f38fcad0",
+      "source": "状态/初始.png",
+      "source_sha256": "40d2f99f4d78d42cf69439fccbd4049b5576927a41534ec0b4b54e6498400268",
+      "alpha": true,
+      "automatic_trigger": true
+    },
+    "starting": {
+      "url": "/api/assets/v1/pets/starting-c2a8025fd519.png",
+      "width": 512,
+      "height": 472,
+      "bytes": 78432,
+      "sha256": "c2a8025fd5194eb4edab40ba77f5a9fd330b2bc161de1713eb0bd6fe9bc41bd0",
+      "source": "状态/启动（完成2个步骤） .png",
+      "source_sha256": "8e98e0ebe314602331f561796c07ce404cb5b67d12aee16dc774fd6fd2862651",
+      "alpha": true,
+      "automatic_trigger": true
+    },
+    "flow": {
+      "url": "/api/assets/v1/pets/flow-5e93dd91d6f5.png",
+      "width": 512,
+      "height": 474,
+      "bytes": 89734,
+      "sha256": "5e93dd91d6f570abac6170306ce40c322d47b76bf20b268be5ba9bd9d5174a64",
+      "source": "状态/渐入佳境（完成5个步骤）.png",
+      "source_sha256": "6d887da976aa99a446689398f5e74339e4c78ba3f61b7a89d1531e4a70a8c8c4",
+      "alpha": true,
+      "automatic_trigger": true
+    },
+    "reward": {
+      "url": "/api/assets/v1/pets/reward-09373780b650.png",
+      "width": 512,
+      "height": 465,
+      "bytes": 84112,
+      "sha256": "09373780b65001138d7a498ef3cc0a201c04ea9ae66fb4897af7b88ba0fac15a",
+      "source": "状态/小闭环奖励（一个任务全部完成）.png",
+      "source_sha256": "1e2635cde13c707dcccd90f2b8d332170849e441859c4ef8f43d88ff772ef355",
+      "alpha": true,
+      "automatic_trigger": true
+    },
+    "distracted": {
+      "url": "/api/assets/v1/pets/distracted-335a48a386af.png",
+      "width": 512,
+      "height": 477,
+      "bytes": 91955,
+      "sha256": "335a48a386afed96b0e9068827c1fb9e247dae346b9861d74a85295090060c48",
+      "source": "状态/走神.png",
+      "source_sha256": "e541bfe517cab5529513cd3f9fa18b515e5e5900db54c255b1078deac3b5ba20",
+      "alpha": true,
+      "automatic_trigger": true
+    },
+    "emergency_dark": {
+      "url": "/api/assets/v1/pets/emergency_dark-3b2922718045.png",
+      "width": 512,
+      "height": 476,
+      "bytes": 100517,
+      "sha256": "3b2922718045d11d40cfbad74aff616832f2a40675b67f9aa64ae8b725e70d81",
+      "source": "状态/紧急暗黑模式态.png",
+      "source_sha256": "9bcc6814c9af7a4a65816229db56f41fb117a801736318ce061e37b47160f795",
+      "alpha": true,
+      "automatic_trigger": false
+    }
+  },
+  "receipts": {
+    "1.1": {
+      "url": "/api/assets/v1/receipts/1.1-284069f5a26f.jpg",
+      "width": 1280,
+      "height": 1908,
+      "bytes": 397776,
+      "sha256": "284069f5a26fcb4a69553448d3ce628d32db1efb9295938a178cb63ceae83cdf",
+      "preview": {
+        "url": "/api/assets/v1/receipts/1.1-preview-430c7558b251.jpg",
+        "width": 384,
+        "height": 572,
+        "bytes": 32883,
+        "sha256": "430c7558b2511c4c6750e3a8947882350c56c39b90d0883e086c45c63a4043d4"
+      },
+      "source": "票根/1.1雨天窗边 .jpg",
+      "source_sha256": "24751aeb0f196b6e153359ce4b52a6bb38da63fb8edd3eeb51f9932f033adf41",
+      "composition": {
+        "coordinate_space": [
+          1696,
+          2528
+        ],
+        "text_box": {
+          "x": 280,
+          "y": 1940,
+          "width": 1120,
+          "height": 250
+        },
+        "date_cover": {
+          "x": 1040,
+          "y": 2305,
+          "width": 470,
+          "height": 75
+        },
+        "date_patch_source": {
+          "x": 400,
+          "y": 2305,
+          "width": 470,
+          "height": 75
+        },
+        "date_text_box": {
+          "x": 1040,
+          "y": 2305,
+          "width": 470,
+          "height": 75
+        },
+        "baked_date": true,
+        "date_source": "receipt_event.occurred_date",
+        "overflow": "wrap_then_reduce_font_or_request_shorter_text_never_clip",
+        "preview_and_export": "same_canvas_composition"
+      }
+    },
+    "1.2": {
+      "url": "/api/assets/v1/receipts/1.2-55b3219ea16b.jpg",
+      "width": 1280,
+      "height": 1908,
+      "bytes": 482311,
+      "sha256": "55b3219ea16b8227946e44b05fcb25703e7328719de478ae954b9578f79084fc",
+      "preview": {
+        "url": "/api/assets/v1/receipts/1.2-preview-10dae9f90d7c.jpg",
+        "width": 384,
+        "height": 572,
+        "bytes": 36836,
+        "sha256": "10dae9f90d7c2763c8c51c03908041af7b858295015e7077fd0609982fafcfa6"
+      },
+      "source": "票根/1.2落日草坪.jpg",
+      "source_sha256": "35d590cbdb5c553ab099a4e93b547e02fb9e2c46d19bba9b235680c29e4fc756",
+      "composition": {
+        "coordinate_space": [
+          1696,
+          2528
+        ],
+        "text_box": {
+          "x": 280,
+          "y": 1940,
+          "width": 1120,
+          "height": 250
+        },
+        "date_cover": {
+          "x": 1040,
+          "y": 2310,
+          "width": 470,
+          "height": 75
+        },
+        "date_patch_source": {
+          "x": 400,
+          "y": 2310,
+          "width": 470,
+          "height": 75
+        },
+        "date_text_box": {
+          "x": 1040,
+          "y": 2310,
+          "width": 470,
+          "height": 75
+        },
+        "baked_date": true,
+        "date_source": "receipt_event.occurred_date",
+        "overflow": "wrap_then_reduce_font_or_request_shorter_text_never_clip",
+        "preview_and_export": "same_canvas_composition"
+      }
+    },
+    "1.3": {
+      "url": "/api/assets/v1/receipts/1.3-b6bfc75941b7.jpg",
+      "width": 1280,
+      "height": 1908,
+      "bytes": 474172,
+      "sha256": "b6bfc75941b7a0dc5102c8741e9b4e346de8897648ae759d2887ca32053dcf4b",
+      "preview": {
+        "url": "/api/assets/v1/receipts/1.3-preview-f35a9de78c5a.jpg",
+        "width": 384,
+        "height": 572,
+        "bytes": 40716,
+        "sha256": "f35a9de78c5a359f2988473de607335f3156b1190bd5b283a7f15a878287d889"
+      },
+      "source": "票根/1.3雨天窗边 .jpg",
+      "source_sha256": "8365af14a04c04770fa824cb062aee52ee38d7bcc4dc28f47311287570227334",
+      "composition": {
+        "coordinate_space": [
+          1696,
+          2528
+        ],
+        "text_box": {
+          "x": 280,
+          "y": 1940,
+          "width": 1120,
+          "height": 250
+        },
+        "date_cover": {
+          "x": 1040,
+          "y": 2307,
+          "width": 470,
+          "height": 75
+        },
+        "date_patch_source": {
+          "x": 400,
+          "y": 2307,
+          "width": 470,
+          "height": 75
+        },
+        "date_text_box": {
+          "x": 1040,
+          "y": 2307,
+          "width": 470,
+          "height": 75
+        },
+        "baked_date": true,
+        "date_source": "receipt_event.occurred_date",
+        "overflow": "wrap_then_reduce_font_or_request_shorter_text_never_clip",
+        "preview_and_export": "same_canvas_composition"
+      }
+    },
+    "2.1": {
+      "url": "/api/assets/v1/receipts/2.1-91540b1acd61.jpg",
+      "width": 1280,
+      "height": 1908,
+      "bytes": 381234,
+      "sha256": "91540b1acd61e88a62c36012fe99b0c2217f810119c1a6373ae03aa0eb2eb6b7",
+      "preview": {
+        "url": "/api/assets/v1/receipts/2.1-preview-89e05510f259.jpg",
+        "width": 384,
+        "height": 572,
+        "bytes": 38247,
+        "sha256": "89e05510f25968363949c7c7336a2bcd3ffbb8c5438dc05e6809c13d33456fdc"
+      },
+      "source": "票根/2.1书桌一角.jpg",
+      "source_sha256": "c6080074f06b7e8e6190523c739be8dbb3e3270798e39a917392a2031e8966a9",
+      "composition": {
+        "coordinate_space": [
+          1696,
+          2528
+        ],
+        "text_box": {
+          "x": 280,
+          "y": 1940,
+          "width": 1120,
+          "height": 250
+        },
+        "date_cover": {
+          "x": 1040,
+          "y": 2280,
+          "width": 470,
+          "height": 75
+        },
+        "date_patch_source": {
+          "x": 400,
+          "y": 2280,
+          "width": 470,
+          "height": 75
+        },
+        "date_text_box": {
+          "x": 1040,
+          "y": 2280,
+          "width": 470,
+          "height": 75
+        },
+        "baked_date": true,
+        "date_source": "receipt_event.occurred_date",
+        "overflow": "wrap_then_reduce_font_or_request_shorter_text_never_clip",
+        "preview_and_export": "same_canvas_composition"
+      }
+    },
+    "2.2": {
+      "url": "/api/assets/v1/receipts/2.2-f7f94c1e8c2c.jpg",
+      "width": 1280,
+      "height": 1908,
+      "bytes": 407674,
+      "sha256": "f7f94c1e8c2ca6e65bb7e65da242e42aad618e969ca661c9febc0b5c09807ac0",
+      "preview": {
+        "url": "/api/assets/v1/receipts/2.2-preview-88c4690bb444.jpg",
+        "width": 384,
+        "height": 572,
+        "bytes": 40683,
+        "sha256": "88c4690bb444a01fd645b8fb952782bcdd85c7c7fed0b94dba8b248c96b2fd4c"
+      },
+      "source": "票根/2.2午后林荫.jpg",
+      "source_sha256": "d8f928a0f41cb6493d5557ac34b0c94cd327e564814efa2d7063b78d5eb17c9e",
+      "composition": {
+        "coordinate_space": [
+          1696,
+          2528
+        ],
+        "text_box": {
+          "x": 280,
+          "y": 1940,
+          "width": 1120,
+          "height": 250
+        },
+        "date_cover": {
+          "x": 1040,
+          "y": 2310,
+          "width": 470,
+          "height": 75
+        },
+        "date_patch_source": {
+          "x": 400,
+          "y": 2310,
+          "width": 470,
+          "height": 75
+        },
+        "date_text_box": {
+          "x": 1040,
+          "y": 2310,
+          "width": 470,
+          "height": 75
+        },
+        "baked_date": true,
+        "date_source": "receipt_event.occurred_date",
+        "overflow": "wrap_then_reduce_font_or_request_shorter_text_never_clip",
+        "preview_and_export": "same_canvas_composition"
+      }
+    },
+    "2.3": {
+      "url": "/api/assets/v1/receipts/2.3-988f7c60d913.jpg",
+      "width": 1280,
+      "height": 1908,
+      "bytes": 350718,
+      "sha256": "988f7c60d913d54b72c9147e829d0b910cc5646fd4a09a06829558467c392cde",
+      "preview": {
+        "url": "/api/assets/v1/receipts/2.3-preview-e317673c34ba.jpg",
+        "width": 384,
+        "height": 572,
+        "bytes": 38595,
+        "sha256": "e317673c34bada5abc44f96ba2be6f46f6ef73578223aaf3aa7ce73cb10607db"
+      },
+      "source": "票根/2.3咖啡馆窗边.jpg",
+      "source_sha256": "26fc7fd512d995fe1a9b8d8c1ad383f9d6071543124decf6f3c4d369878b1584",
+      "composition": {
+        "coordinate_space": [
+          1696,
+          2528
+        ],
+        "text_box": {
+          "x": 280,
+          "y": 1940,
+          "width": 1120,
+          "height": 250
+        },
+        "date_cover": {
+          "x": 1040,
+          "y": 2305,
+          "width": 470,
+          "height": 75
+        },
+        "date_patch_source": {
+          "x": 400,
+          "y": 2305,
+          "width": 470,
+          "height": 75
+        },
+        "date_text_box": {
+          "x": 1040,
+          "y": 2305,
+          "width": 470,
+          "height": 75
+        },
+        "baked_date": true,
+        "date_source": "receipt_event.occurred_date",
+        "overflow": "wrap_then_reduce_font_or_request_shorter_text_never_clip",
+        "preview_and_export": "same_canvas_composition"
+      }
+    },
+    "3.1": {
+      "url": "/api/assets/v1/receipts/3.1-f816665d3300.jpg",
+      "width": 1280,
+      "height": 1908,
+      "bytes": 428503,
+      "sha256": "f816665d3300826f2e913c0026545192298a4422b28ca5274bbe93218b1922a7",
+      "preview": {
+        "url": "/api/assets/v1/receipts/3.1-preview-3ab2b6af292a.jpg",
+        "width": 384,
+        "height": 572,
+        "bytes": 33227,
+        "sha256": "3ab2b6af292a64310131586237a72dff3fb756a3b348473ac717721ab437bc46"
+      },
+      "source": "票根/3.1夜晚营地.jpg",
+      "source_sha256": "2d135b1ffd71bbc7cea83128b8023780490c57a09aef7429861939c4000fb77d",
+      "composition": {
+        "coordinate_space": [
+          1696,
+          2528
+        ],
+        "text_box": {
+          "x": 280,
+          "y": 1940,
+          "width": 1120,
+          "height": 250
+        },
+        "date_cover": {
+          "x": 1040,
+          "y": 2270,
+          "width": 470,
+          "height": 75
+        },
+        "date_patch_source": {
+          "x": 400,
+          "y": 2270,
+          "width": 470,
+          "height": 75
+        },
+        "date_text_box": {
+          "x": 1040,
+          "y": 2270,
+          "width": 470,
+          "height": 75
+        },
+        "baked_date": true,
+        "date_source": "receipt_event.occurred_date",
+        "overflow": "wrap_then_reduce_font_or_request_shorter_text_never_clip",
+        "preview_and_export": "same_canvas_composition"
+      }
+    },
+    "3.2": {
+      "url": "/api/assets/v1/receipts/3.2-06be7b3ddc31.jpg",
+      "width": 1280,
+      "height": 1908,
+      "bytes": 538297,
+      "sha256": "06be7b3ddc315a3ae0f90198713b6748207bdb35044f81201849239daade08ee",
+      "preview": {
+        "url": "/api/assets/v1/receipts/3.2-preview-03b5d1741a9a.jpg",
+        "width": 384,
+        "height": 572,
+        "bytes": 46360,
+        "sha256": "03b5d1741a9ab5cb2e1b98b93a0afa88cf7f8ed4dee26d8da0ca6cf80b894b9c"
+      },
+      "source": "票根/3.2午后露台.jpg",
+      "source_sha256": "78ef662cdfaffadefc953a2b7e90c43a39c5b2a6ba4a27ab21edc3462fcf098e",
+      "composition": {
+        "coordinate_space": [
+          1696,
+          2528
+        ],
+        "text_box": {
+          "x": 280,
+          "y": 1940,
+          "width": 1120,
+          "height": 250
+        },
+        "date_cover": {
+          "x": 1040,
+          "y": 2310,
+          "width": 470,
+          "height": 75
+        },
+        "date_patch_source": {
+          "x": 400,
+          "y": 2310,
+          "width": 470,
+          "height": 75
+        },
+        "date_text_box": {
+          "x": 1040,
+          "y": 2310,
+          "width": 470,
+          "height": 75
+        },
+        "baked_date": true,
+        "date_source": "receipt_event.occurred_date",
+        "overflow": "wrap_then_reduce_font_or_request_shorter_text_never_clip",
+        "preview_and_export": "same_canvas_composition"
+      }
+    },
+    "3.3": {
+      "url": "/api/assets/v1/receipts/3.3-92f47aacfdfc.jpg",
+      "width": 1280,
+      "height": 1908,
+      "bytes": 407772,
+      "sha256": "92f47aacfdfcb14915a2591c44427e98a53583746320c65be48b0b6211a7f15f",
+      "preview": {
+        "url": "/api/assets/v1/receipts/3.3-preview-bfbff24e4d98.jpg",
+        "width": 384,
+        "height": 572,
+        "bytes": 36692,
+        "sha256": "bfbff24e4d9871f65230208fcf7ee1b9ae2e08c9423dc992339c4eac90bfebeb"
+      },
+      "source": "票根/3.3黎明窗台.jpg",
+      "source_sha256": "a152113138aac9a4034281335b7490f8356d6d625b05ad9c1174efab3ca54a90",
+      "composition": {
+        "coordinate_space": [
+          1696,
+          2528
+        ],
+        "text_box": {
+          "x": 280,
+          "y": 1940,
+          "width": 1120,
+          "height": 250
+        },
+        "date_cover": {
+          "x": 1040,
+          "y": 2270,
+          "width": 470,
+          "height": 75
+        },
+        "date_patch_source": {
+          "x": 400,
+          "y": 2270,
+          "width": 470,
+          "height": 75
+        },
+        "date_text_box": {
+          "x": 1040,
+          "y": 2270,
+          "width": 470,
+          "height": 75
+        },
+        "baked_date": true,
+        "date_source": "receipt_event.occurred_date",
+        "overflow": "wrap_then_reduce_font_or_request_shorter_text_never_clip",
+        "preview_and_export": "same_canvas_composition"
+      }
+    },
+    "4.1": {
+      "url": "/api/assets/v1/receipts/4.1-d74714baa57c.jpg",
+      "width": 1280,
+      "height": 1908,
+      "bytes": 469437,
+      "sha256": "d74714baa57c0559a9b74ac036babb095893fd68254f36aad086876eb757b15c",
+      "preview": {
+        "url": "/api/assets/v1/receipts/4.1-preview-71c6e15c7805.jpg",
+        "width": 384,
+        "height": 572,
+        "bytes": 44092,
+        "sha256": "71c6e15c78053c7d5125f20d1fc609357d6caf8bcb3341becd63c45f333ca946"
+      },
+      "source": "票根/4.1阳光书桌.jpg",
+      "source_sha256": "21f2974771e172c0a347b3fb2069bf9aab81584907a982551222f10657eb920c",
+      "composition": {
+        "coordinate_space": [
+          1696,
+          2528
+        ],
+        "text_box": {
+          "x": 280,
+          "y": 1940,
+          "width": 1120,
+          "height": 250
+        },
+        "date_cover": {
+          "x": 1040,
+          "y": 2270,
+          "width": 470,
+          "height": 75
+        },
+        "date_patch_source": {
+          "x": 400,
+          "y": 2270,
+          "width": 470,
+          "height": 75
+        },
+        "date_text_box": {
+          "x": 1040,
+          "y": 2270,
+          "width": 470,
+          "height": 75
+        },
+        "baked_date": true,
+        "date_source": "receipt_event.occurred_date",
+        "overflow": "wrap_then_reduce_font_or_request_shorter_text_never_clip",
+        "preview_and_export": "same_canvas_composition"
+      }
+    },
+    "4.2": {
+      "url": "/api/assets/v1/receipts/4.2-9968f48b4eeb.jpg",
+      "width": 1280,
+      "height": 1908,
+      "bytes": 494737,
+      "sha256": "9968f48b4eeb3fadf1de4d9cc7520e7d4cddb850e2dd538e94ba08c00d5af97d",
+      "preview": {
+        "url": "/api/assets/v1/receipts/4.2-preview-891bfa69c2d3.jpg",
+        "width": 384,
+        "height": 572,
+        "bytes": 42858,
+        "sha256": "891bfa69c2d34169b7d857a4e051c600835d53b9a55f8781e63510de9216f36d"
+      },
+      "source": "票根/4.2草坪野餐.jpg",
+      "source_sha256": "4c44bf44d6d7b6a46da45093a4e30518af20acb0e8f56f86146ac5f719c65842",
+      "composition": {
+        "coordinate_space": [
+          1696,
+          2528
+        ],
+        "text_box": {
+          "x": 280,
+          "y": 1940,
+          "width": 1120,
+          "height": 250
+        },
+        "date_cover": {
+          "x": 1040,
+          "y": 2245,
+          "width": 470,
+          "height": 75
+        },
+        "date_patch_source": {
+          "x": 400,
+          "y": 2245,
+          "width": 470,
+          "height": 75
+        },
+        "date_text_box": {
+          "x": 1040,
+          "y": 2245,
+          "width": 470,
+          "height": 75
+        },
+        "baked_date": true,
+        "date_source": "receipt_event.occurred_date",
+        "overflow": "wrap_then_reduce_font_or_request_shorter_text_never_clip",
+        "preview_and_export": "same_canvas_composition"
+      }
+    },
+    "4.3": {
+      "url": "/api/assets/v1/receipts/4.3-c4093bb977f3.jpg",
+      "width": 1280,
+      "height": 1908,
+      "bytes": 424527,
+      "sha256": "c4093bb977f3761c0bf71670bea5e82372e0c513643da630a8ff456353161a44",
+      "preview": {
+        "url": "/api/assets/v1/receipts/4.3-preview-da984ec822c5.jpg",
+        "width": 384,
+        "height": 572,
+        "bytes": 44297,
+        "sha256": "da984ec822c559a53a9e9488b52a26b291d5b1402a3317e8c936a42fdbf62726"
+      },
+      "source": "票根/4.3卧室地板.jpg",
+      "source_sha256": "430046d8b74199b60010be569305f0febb50652aa736c9ed0ff254bdbaf85d4e",
+      "composition": {
+        "coordinate_space": [
+          1696,
+          2528
+        ],
+        "text_box": {
+          "x": 280,
+          "y": 1940,
+          "width": 1120,
+          "height": 250
+        },
+        "date_cover": {
+          "x": 1040,
+          "y": 2308,
+          "width": 470,
+          "height": 75
+        },
+        "date_patch_source": {
+          "x": 400,
+          "y": 2308,
+          "width": 470,
+          "height": 75
+        },
+        "date_text_box": {
+          "x": 1040,
+          "y": 2308,
+          "width": 470,
+          "height": 75
+        },
+        "baked_date": true,
+        "date_source": "receipt_event.occurred_date",
+        "overflow": "wrap_then_reduce_font_or_request_shorter_text_never_clip",
+        "preview_and_export": "same_canvas_composition"
+      }
+    }
+  },
+  "journal": {
+    "available": false,
+    "background": null,
+    "reason": "awaiting_supplied_background"
+  },
+  "originals": {
+    "states.zip": {
+      "bytes": 2976042,
+      "sha256": "e0f6090b63c32380832c1f030182d5aff6548a89c5e93ab39e79ddba124cc5f6"
+    },
+    "receipts.zip": {
+      "bytes": 31351571,
+      "sha256": "04554e2731283e08bf51994a4b93260d2f0a2adc003aee344685d92261b91312"
+    }
+  }
+}
