@@ -47,6 +47,8 @@ async function get(path) {
 const BUTTON_ACTIONS = {
   "现在开始": () => post("/api/task/choose_time", { user_id: userId, when: "now" }),
   "待会儿": () => post("/api/task/choose_time", { user_id: userId, when: "later" }),
+  "5分钟后": () => post("/api/task/choose_time", { user_id: userId, when: "in_5_minutes" }),
+  "10分钟后": () => post("/api/task/choose_time", { user_id: userId, when: "in_10_minutes" }),
   "今天不做": () => post("/api/task/choose_time", { user_id: userId, when: "not_today" }),
   "行": () => post("/api/task/commit", { user_id: userId, agree: true }),
   "再想想": () => post("/api/task/commit", { user_id: userId, agree: false }),
@@ -90,8 +92,9 @@ function systemNote(text) {
 
 function handleTaskTiming(task) {
   if (task && task.state === "executing") {
-    if (task.current_step !== lastStep) {
-      lastStep = task.current_step;
+    const key = task.step_id || task.title + "|" + task.current_step;
+    if (key !== lastStep) {
+      lastStep = key;
       stepStartedAt = Date.now();
     }
   } else {

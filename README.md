@@ -1,3 +1,13 @@
+> 最新产品规则：AI拆分用于降低行动门槛，只记录用户自报进度，不检查答案或强加理由/留证/成果验收。生成、范围澄清与计划审核同步遵守，见[行动辅助规则](docs/action-support.md)。
+
+> 对外文案增加统一过滤：删除明确内部括号说明，保留必要动作与任务约束；父任务动作明细改为自然换行。规则与接入见[展示文案协议](docs/public-ai-text.md)。
+
+> 最新修复：默认聊天由真实AI区分闲聊、任务和范围补充；任务澄清在对话页完成，focus非空才进入专注。接口字段、失败处理和前端接入见[闲聊与专注前澄清](docs/chat-and-clarification.md)。
+
+> 最新规则：取消所有任务计时；未完成跨天保留，整项完成移出备忘录，回执/手帐长期保留。接口与前端删减清单见[任务生命周期](docs/task-lifecycle.md)。
+
+> 新主流程接口：真实AI多任务备忘录、独立森林专注、回执事实与当日完成事件，见[接入协议](docs/today-memo.md)。默认/chat要求request_id并返回备忘录；前端需按新协议接入。
+
 # 轻步 LightStep
 
 学习不用急，一步就好。帮助用户把学习目标拆成眼前一小步的 AI 伙伴，面向微信小程序开发。
@@ -6,7 +16,7 @@
 
 | 目录或文件 | 内容 | 对应工作 |
 | --- | --- | --- |
-| [frontend/](frontend/) | uni-app 微信小程序前端预留目录，目前尚无业务源码 | 页面、黑猫动效、感官模式、客户端计时、缓存、回执绘制 |
+| [frontend/](frontend/) | uni-app 微信小程序源码，由前端成员维护 | 页面、黑猫动效、感官模式、缓存、回执绘制 |
 | [backend/](backend/) | 已有 FastAPI + SQLite 后端及网页调试页 | AI 调用、任务拆解、步骤调整、接口与数据、测试 |
 | [docs/requirements.md](docs/requirements.md) | 产品主线与待定规则 | 全体成员开发前阅读 |
 | [docs/handoff.md](docs/handoff.md) | 后端功能、缺陷、验证记录与下一轮任务 | 实施与验收时更新 |
@@ -16,7 +26,7 @@
 
 采用前后端分离：任务、步骤进度和偏好由 FastAPI + SQLite 管理，回执与手帐保存在客户端本地。服务端手帐已停用；便签响应状态已修复，其余已知缺陷见交接记录。DeepSeek真实调用与任务创建已实测；对话质量、小程序联调及部署仍待验证。backend/static/ 是后端附带的网页调试页。小程序成员将业务源码提交至 frontend/。
 
-退出、跨天、历史和回执规则仍有冲突，以需求文档中的待定事项为准。
+未完成跨天保留、整项完成移除和回执/手帐长期保留已确认；其他未决规则见需求文档。
 
 ## 已确认方案
 
@@ -37,9 +47,9 @@ pip install -r requirements.txt
 python run.py
 ```
 
-调试页：http://127.0.0.1:8000 ，接口文档：http://127.0.0.1:8000/docs 。默认 LLM_PROVIDER=mock，无需真实密钥；配置示例为 backend/.env.example。
+调试页：http://127.0.0.1:8000 ，接口文档：http://127.0.0.1:8000/docs 。默认 LLM_PROVIDER=openai，生成任务前必须配置真实AI；缺配置或调用失败明确提示并保留旧任务，不使用离线模板。配置示例为 backend/.env.example。
 
-测试在 backend/ 内运行 python smoke_test.py，先通过 LIGHTSTEP_DB 指向独立临时数据库。更多说明见 [backend/README.md](backend/README.md)。
+测试在 backend/ 内运行 python smoke_test.py，脚本自动创建临时SQLite并显式注入测试替身，不验证真实AI。更多说明见 [backend/README.md](backend/README.md)。
 
 ## 一起开发
 

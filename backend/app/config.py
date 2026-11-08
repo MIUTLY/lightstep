@@ -1,7 +1,7 @@
 """轻步 LightStep 后端配置。
 
 所有配置项都可通过环境变量或项目根目录下的 .env 文件覆盖。
-离线模式（LLM_PROVIDER=mock）不需要任何外部依赖和 key。
+运行只使用真实 OpenAI 兼容接口；缺配置时任务生成明确失败，已有任务仍可操作。
 """
 import os
 from dataclasses import dataclass
@@ -43,25 +43,27 @@ class Settings:
     server_reload: bool = True
     serve_debug_ui: bool = True
     cors_origins: tuple[str, ...] = ("http://localhost:5173", "http://127.0.0.1:5173")
-    # LLM 提供方：mock（离线）| openai（OpenAI 兼容 API）
-    llm_provider: str = "mock"
+    # 运行时只支持 openai（OpenAI 兼容 API），不支持 mock。
+    llm_provider: str = "openai"
     llm_base_url: str = "https://api.deepseek.com"
     llm_api_key: str = ""
     llm_model: str = "deepseek-flash"
     llm_temperature: float = 0.7
     llm_timeout: float = 30.0
     llm_max_tokens: int = 1024
+    llm_decompose_max_tokens: int = 4096
     # 留空时不发送供应商扩展参数；DeepSeek 可配置 disabled / enabled。
     llm_thinking: str = ""
     # 数据
     db_path: str = "lightstep.db"
-    # 自适应粒度阈值（秒）
-    fast_threshold: float = 15.0
-    slow_threshold: float = 90.0
 
     def __post_init__(self):
+        if self.llm_timeout <= 0:
+            raise ValueError("LLM_TIMEOUT must be positive")
         if self.llm_thinking not in ("", "enabled", "disabled"):
             raise ValueError("LLM_THINKING must be empty, enabled or disabled")
+        if self.llm_decompose_max_tokens <= 0:
+            raise ValueError("LLM_DECOMPOSE_MAX_TOKENS must be positive")
         if self.llm_max_tokens <= 0:
             raise ValueError("LLM_MAX_TOKENS must be positive")
 
@@ -75,17 +77,16 @@ class Settings:
             cors_origins=tuple(origin.strip() for origin in os.getenv(
                 "LIGHTSTEP_CORS_ORIGINS", "http://localhost:5173,http://127.0.0.1:5173"
             ).split(",") if origin.strip()),
-            llm_provider=os.getenv("LLM_PROVIDER", "mock").strip().lower(),
+            llm_provider=os.getenv("LLM_PROVIDER", "openai").strip().lower(),
             llm_base_url=os.getenv("LLM_BASE_URL", "https://api.deepseek.com").strip(),
             llm_api_key=os.getenv("LLM_API_KEY", "").strip(),
             llm_model=os.getenv("LLM_MODEL", "deepseek-flash").strip(),
             llm_temperature=float(os.getenv("LLM_TEMPERATURE", "0.7")),
             llm_timeout=float(os.getenv("LLM_TIMEOUT", "30")),
             llm_max_tokens=int(os.getenv("LLM_MAX_TOKENS", "1024")),
+            llm_decompose_max_tokens=int(os.getenv("LLM_DECOMPOSE_MAX_TOKENS", "4096")),
             llm_thinking=os.getenv("LLM_THINKING", "").strip().lower(),
             db_path=_resolve_db_path(os.getenv("LIGHTSTEP_DB", "lightstep.db")),
-            fast_threshold=float(os.getenv("FAST_THRESHOLD", "15")),
-            slow_threshold=float(os.getenv("SLOW_THRESHOLD", "90")),
         )
 
 

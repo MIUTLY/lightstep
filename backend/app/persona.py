@@ -37,12 +37,8 @@ def ask_when() -> str:
     return "什么时候开始？"
 
 
-def scheduled(label: str) -> str:
-    return f"行，{label}我记着。到时候轻轻叫你。"
-
-
 def commit_prompt() -> str:
-    return "就做5分钟。5分钟到了想走随时走，行不行？"
+    return "准备好了就开始，想停时随时停。行不行？"
 
 
 def commit_agree() -> str:
@@ -53,15 +49,8 @@ def commit_disagree() -> str:
     return "好，那再想想。随时都行。"
 
 
-def step_next_aside(direction: str) -> str:
-    """下一步的温柔旁白。up=加量（状态在线），down=拆细（有点卡）。"""
-    if direction == "up":
-        return _pick(["状态不错，加点量。", "挺顺的，往前一点。", "在线，再加一小步。"])
-    return _pick(["没事，慢一点，拆细点。", "这步有点重，拆开它。", "不赶，我们做小一点。"])
-
-
 def all_done(title: str, steps_done: int) -> str:
-    return f"「{title}」做完了。够了，去休息吧。"
+    return "这一小段先到这。想继续再来。"
 
 
 def gentle_end(what: str) -> str:
@@ -70,6 +59,14 @@ def gentle_end(what: str) -> str:
 
 def exit_line() -> str:
     return "好，那先到这儿。随时回来。"
+
+
+def tired_choice() -> str:
+    return "累了就先歇歇。想结束可以点「今天到这吧」，也可以把这一步拆小。进度先留着。"
+
+
+def tired_idle() -> str:
+    return "那先歇歇。我在，想做点什么时再来。"
 
 
 def shrink() -> str:
@@ -82,7 +79,7 @@ def grow() -> str:
 
 def boundary(direction: str) -> str:
     if direction == "down":
-        return "已经是最小步了，再小就只是动一下手指。就做这一下，好不好？"
+        return "这一步先保持原样，不急。"
     return "再大就太吓人了。就这样，正好。"
 
 
@@ -100,7 +97,7 @@ def afk_ok() -> str:
     return "行，去刷吧。我不催。"
 
 
-def afk_due() -> str:
+def available() -> str:
     return "我在这儿，需要了叫我。"
 
 
@@ -162,4 +159,4 @@ def remind_step(step: str) -> str:
 
 
 def switch_ask() -> str:
-    return "好，想换成什么？"
+    return "想换成什么？说“换成……”就行。"

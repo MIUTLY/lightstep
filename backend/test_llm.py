@@ -1,4 +1,4 @@
-"""模型协议、异常兜底及非法结果的回归检查；不调用真实供应商。"""
+"""真实适配器协议与失败回归；HTTP仅用隔离替身，不调用供应商。"""
 import contextlib
 import io
 import json
@@ -10,13 +10,13 @@ from unittest.mock import patch
 
 _boot = tempfile.TemporaryDirectory(prefix="lightstep-llm-unit-")
 os.environ["LIGHTSTEP_DB"] = str(Path(_boot.name) / "boot.db")
-os.environ["LLM_PROVIDER"] = "mock"
+os.environ["LLM_PROVIDER"] = "openai"
 
 import httpx
 from fastapi.testclient import TestClient
 from app.config import Settings
 from app.db import DB
-from app.llm import OpenAICompatLLM
+from app.llm import OpenAICompatLLM, AIError
 from app.main import app
 import check_llm
 
@@ -24,22 +24,24 @@ import check_llm
 class LLMTests(unittest.TestCase):
     def setUp(self):
         self.settings = Settings(llm_provider="openai", llm_api_key="test-key-not-real",
-                                 llm_thinking="disabled", llm_max_tokens=512)
+                                 llm_thinking="disabled", llm_max_tokens=512, llm_decompose_max_tokens=768)
         self.llm = OpenAICompatLLM(self.settings)
 
     def response(self, content, finish_reason="stop"):
         return httpx.Response(200, request=httpx.Request("POST", "https://api.deepseek.com/chat/completions"),
-            json={"choices": [{"message": {"content": content}, "finish_reason": finish_reason}]})
+            json={"choices": [{"workflow": "legacy", "message": {"content": content}, "finish_reason": finish_reason}]})
 
     def test_json_request_has_budget_and_optional_vendor_controls(self):
-        response = self.response('{"fine":["开文档"],"normal":["写一句"],"coarse":["写一段"]}')
-        with patch("httpx.post", return_value=response) as post:
+        response = self.response(json.dumps({"trees": [{"text": "写一段", "children": [{"text": "写一句", "children": [{"text": "开文档"}]}]}]}))
+        with patch("httpx.post", side_effect=[response, self.response(json.dumps({
+                "decision": "accept", "relevant": True, "coverage": True,
+                "parent_child_consistent": True, "no_duplicates": True}))]) as post:
             result = self.llm.decompose("写论文")
-        self.assertEqual(result["normal"], ["写一句"])
-        kwargs = post.call_args.kwargs
+        self.assertEqual(result["trees"][0]["children"][0]["text"], "写一句")
+        kwargs = post.call_args_list[0].kwargs
         self.assertEqual(kwargs["json"]["response_format"], {"type": "json_object"})
         self.assertEqual(kwargs["json"]["thinking"], {"type": "disabled"})
-        self.assertEqual(kwargs["json"]["max_tokens"], 512)
+        self.assertEqual(kwargs["json"]["max_tokens"], 768)
         self.assertEqual(kwargs["headers"]["Authorization"], "Bearer test-key-not-real")
 
     def test_generic_provider_does_not_receive_thinking_when_unconfigured(self):
@@ -57,23 +59,23 @@ class LLMTests(unittest.TestCase):
                  patch.object(self.llm, "detect_emotion", return_value="正常"), TestClient(app) as client:
                 for index, data in enumerate(invalid):
                     with self.subTest(data=data), patch.object(self.llm, "_chat", return_value=json.dumps(data)):
-                        response = client.post("/api/chat", json={"user_id": f"invalid-{index}", "message": "写论文"})
+                        response = client.post("/api/chat", json={"user_id": f"invalid-{index}", "workflow": "legacy", "message": "写论文"})
                         self.assertEqual(response.status_code, 200)
-                        self.assertEqual(response.json()["state"], "ready")
-                        self.assertIsInstance(response.json()["task"]["current_step"], str)
+                        self.assertEqual(response.json()["state"], "idle")
+                        self.assertEqual(response.json()["generation"]["status"], "failed")
+                        self.assertIsNone(db.get_active_task(f"invalid-{index}"))
 
     def test_truncated_generation_is_rejected(self):
         with patch("httpx.post", return_value=self.response("{", "length")):
-            with self.assertRaises(ValueError):
+            with self.assertRaises(AIError):
                 self.llm._chat("system", "user", json_mode=True)
 
-    def test_fallback_log_does_not_include_key_or_provider_body(self):
-        with patch.object(self.llm, "_chat", side_effect=RuntimeError("test-key-not-real private response")), \
-             self.assertLogs("app.llm", level="WARNING") as logs:
-            answer = self.llm.reply("idle", "你好")
-        self.assertEqual(answer, "")
-        self.assertNotIn("test-key-not-real", " ".join(logs.output))
-        self.assertNotIn("private response", " ".join(logs.output))
+    def test_error_does_not_include_key_or_provider_body(self):
+        with patch("httpx.post", side_effect=httpx.ConnectError("test-key-not-real private response")):
+            with self.assertRaises(AIError) as caught:
+                self.llm.reply("idle", "你好")
+        self.assertNotIn("test-key-not-real", str(caught.exception))
+        self.assertNotIn("private response", str(caught.exception))
 
     def test_probe_reports_failure_instead_of_offline_success(self):
         output = io.StringIO()

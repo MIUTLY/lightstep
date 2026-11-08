@@ -1,63 +1,41 @@
-# AI 接入与真实调用验证
+# AI接入与验证
 
-验证日期：2026-11-07。供应商：DeepSeek；模型：deepseek-flash。
+2026-11-07最新规则：实际运行仅真实AI，取消默认离线、领域任务模板、AI失败后模板成功路径。森林协议和错误/重试接口见[ai-task-generation.md](ai-task-generation.md)。
 
-## 已验证结果
+## 配置后端
 
-- 供应商 /models 返回HTTP 200，模型列表包含 deepseek-flash 与 deepseek-v4-pro。
-- 一次最小聊天请求返回HTTP 200和“连接成功”；该请求供应商报告共11个token。
-- 项目 /api/chat 用“我想复习操作系统的进程同步”建立任务，返回HTTP 200、state=ready及模型生成的当前步骤。
-- 该项目集成检查调用真实模型两次（情绪识别和任务拆解），测试中禁止离线兜底，因此不是模板伪装成连接成功。
-- 真实生成步骤之一：“把进程同步那章的标题和小标题抄一遍，抄完就算完成。”此处只证明链路与结构可用，不代表步骤质量已经充分验收。
-- 密钥仅由本次测试进程的环境注入，未写入项目配置、代码、文档或提交；测试结束后没有部署一个持续运行的线上服务。
-
-## 服务端配置
-
-在实际运行后端的电脑或部署环境中，复制 backend/.env.example 为 backend/.env，然后配置：
+复制backend/.env.example为backend/.env，在实际运行后端的环境填写：
 
 ```dotenv
 LLM_PROVIDER=openai
 LLM_BASE_URL=https://api.deepseek.com
-LLM_API_KEY=在运行后端的环境填写
+LLM_API_KEY=在后端环境填写真实密钥
 LLM_MODEL=deepseek-flash
 LLM_THINKING=disabled
 LLM_MAX_TOKENS=1024
-LLM_TIMEOUT=60
+LLM_DECOMPOSE_MAX_TOKENS=4096
+LLM_TIMEOUT=30
 ```
 
-openai 在这里是兼容协议名称，不是要求购买某一供应商服务。示例使用非思考模式和单次输出上限；超出输出上限导致内容截断时，应用会受控回退。其他供应商不支持 thinking 参数时把 LLM_THINKING 留空。
+openai表示兼容协议，不限定供应商。其他供应商不支持thinking参数时留空。环境变量优先于.env，修改配置后重启后端；遗留LLM_PROVIDER=mock必须清除或改openai，不能再生成离线任务。密钥不放客户端或仓库。
 
-仓库默认仍为mock，保证团队无密钥可调试。环境变量优先于.env，若终端已设置 LLM_PROVIDER=mock，修改.env不会覆盖它。改配置后重启后端。
+## 真正验证
 
-模型密钥只配置在后端，不放在小程序、调试页config.js或GitHub。SQLite和回执本地存储的分工不变。
-
-## 如何确认真正接通
-
-在 backend/ 内执行：
+在backend执行：
 
 ```bash
 python check_llm.py
 python check_llm.py --task
 ```
 
-第一个命令发起一次真实聊天请求；--task额外发起一次真实任务拆解，会产生额外API调用。只有真实返回且校验通过才输出 remote_ok，不使用离线兜底。配置缺失退出码2；远端失败或结构错误退出码1；全部成功退出码0。脚本不打印密钥、请求头、供应商响应体或用户隐私。
+第一条发起一次真实连通聊天；--task额外发起森林生成、独立内容复核两次请求（有关键歧义时需转用应用澄清流程）。只有真实返回通过校验才输出remote_ok。配置缺失退出2，供应商/结构/内容失败退出1，成功退出0。输出不含密钥、响应体和请求头。
 
-应用正常运行时依然保留离线兜底；控制台会按阶段记录简短fallback日志，只含异常类型。因此“网页能回复”或 /api/health 正常不等于模型已经接通。
+生成与复核共享LLM_TIMEOUT逻辑预算，各请求使用剩余时间；超时或返回过晚的结果不得写入任务。HTTP库按网络阶段执行超时，网络等待实际耗时仍需真实环境观测。服务可在无密钥时启动，/api/health只表示进程存活，已有任务操作不依赖AI。
 
-## 本轮代码调整
+## 本轮验证边界
 
-- 默认DeepSeek模型名由旧的deepseek-chat改为已实测的deepseek-flash。
-- 增加 LLM_MAX_TOKENS、可选 LLM_THINKING；拆解请求要求JSON对象。
-- 校验三档步骤均为非空文本列表；空结果、数字步骤、非法结构与截断输出受控回退，修复原B06非法模型结果导致500的问题。
-- 模型调用异常仅记录类型，避免打印密钥或供应商原始错误内容。
-- httpx增加SOCKS支持，解决本次环境已有SOCKS代理但缺socksio依赖的问题；沿用环境代理与TLS校验。
+隔离HTTP和服务测试验证协议、明确失败、原子替换、重试、澄清和旧进度保护，不证明模型理解目标的效果。内容复核使用同一真实供应商的独立请求，不能视为自然语言语义的形式化证明。当前环境没有可用真实供应商配置，未进行本轮真实任务样本或微信实测。配置后应分别输入“洗衣服”“洗碗”“整理桌面”，必要澄清后核对整个森林的实际内容。
 
-## 验证与剩余工作
+## 历史连通记录
 
-- python -m unittest -v test_llm.py test_storage_boundary.py：13项通过。
-- node --test test_local_journal.cjs：3项通过。
-- mock模式、独立临时数据库的smoke_test.py通过。
-- 真实调用已验证连接、结构和任务创建；尚未覆盖所有情绪表达、长期对话质量、模型超时统计、小程序真机和生产部署。
-- B01粒度跳步、B03普通提问覆盖任务、B04/B05参数与状态校验、B07结束意图仍在待办。
-
-官方协议参考：https://api-docs.deepseek.com/ 、https://api-docs.deepseek.com/guides/thinking_mode/ 。
+此前旧三清单协议曾用DeepSeek/deepseek-flash验证/models、最小聊天和任务创建，测试进程使用外部注入密钥。该历史结果不构成本轮森林生成、内容复核或持续可用的验收；不从历史复制密钥。

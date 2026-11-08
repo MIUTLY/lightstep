@@ -1,13 +1,4 @@
-"""自适应步骤粒度引擎（技术亮点 1）。
-
-根据用户完成单步的耗时，动态调整下一步的大小：
-  - 做得快（< fast_threshold 秒）→ 状态在线，下一步加量一档
-  - 卡得久（> slow_threshold 秒）→ 启动吃力，下一步拆细一档
-  - 中间区间 → 保持当前粒度
-
-纯逻辑，无 LLM 调用，忠实于 PRD 里"约 80 行、阈值判断"的描述。
-"""
-from .config import settings
+"""用户主动选择的轻重档位；完成耗时不参与调整。"""
 
 # 粒度档位：1 细 / 2 中 / 3 粗
 _LEVEL_NAMES = {1: "fine", 2: "normal", 3: "coarse"}
@@ -21,27 +12,9 @@ def clamp_level(level: int) -> int:
     return max(1, min(3, level))
 
 
-def judge(duration_ms: int) -> str:
-    """返回 up（加量）/ down（拆细）/ keep（保持）。"""
-    seconds = duration_ms / 1000.0
-    if seconds < settings.fast_threshold:
-        return "up"
-    if seconds > settings.slow_threshold:
-        return "down"
-    return "keep"
-
-
 def shift_level(cur: int, direction: str) -> int:
     if direction == "up":
         return clamp_level(cur + 1)
     if direction == "down":
         return clamp_level(cur - 1)
     return cur
-
-
-def map_progress(old_idx: int, old_total: int, new_total: int) -> int:
-    """切换粒度时按完成比例映射进度，避免从头开始。"""
-    if old_total <= 1 or new_total <= 1:
-        return 0
-    frac = old_idx / float(old_total)
-    return min(int(round(frac * new_total)), new_total - 1)

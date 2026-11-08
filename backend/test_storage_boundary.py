@@ -11,9 +11,10 @@ from unittest.mock import patch
 # 应用首次导入也只能创建临时数据库。
 _boot_dir = tempfile.TemporaryDirectory(prefix="lightstep-boundary-boot-")
 os.environ["LIGHTSTEP_DB"] = str(Path(_boot_dir.name) / "boot.db")
-os.environ["LLM_PROVIDER"] = "mock"
+os.environ["LLM_PROVIDER"] = "openai"
 
 from fastapi.testclient import TestClient
+from tests.fakes import MockLLM
 from app.db import DB
 from app.main import app
 
@@ -24,22 +25,25 @@ class StorageBoundaryTests(unittest.TestCase):
         self.db = DB(str(Path(self.tmp.name) / "test.db"))
         self.swap = patch("app.services.db", self.db)
         self.swap.start()
+        self.fake = patch("app.services.llm", MockLLM())
+        self.fake.start()
         self.client = TestClient(app)
         self.uid = "boundary-test"
 
     def tearDown(self):
         self.client.close()
         self.swap.stop()
+        self.fake.stop()
         self.tmp.cleanup()
 
     def start_task(self):
         for path, payload in [
             ("/api/session/open", {}),
-            ("/api/chat", {"message": "背单词"}),
+            ("/api/chat", {"workflow": "legacy", "message": "背单词"}),
             ("/api/task/choose_time", {"when": "now"}),
             ("/api/task/commit", {"agree": True}),
         ]:
-            response = self.client.post(path, json={"user_id": self.uid, **payload})
+            response = self.client.post(path, json={"user_id": self.uid, **({"workflow":"legacy"} if path.endswith("chat") else {}), **payload})
             self.assertEqual(response.status_code, 200)
 
     def assert_no_server_journal(self):
@@ -59,10 +63,11 @@ class StorageBoundaryTests(unittest.TestCase):
 
     def test_completing_task_does_not_save_receipt(self):
         self.start_task()
-        task = self.db.get_active_task(self.uid)
-        count = len(json.loads(task["levels_json"])["normal"])
-        self.db.update_active_task(self.uid, level=2, current_idx=count - 1)
-        r = self.client.post("/api/step/complete", json={"user_id": self.uid, "duration_ms": 30000})
+        # 按公开流程完成，避免依赖旧三清单的内部游标。
+        for _ in range(30):
+            r = self.client.post("/api/step/complete", json={"user_id": self.uid, "duration_ms": 30000})
+            if r.json()["state"] == "done":
+                break
         self.assertEqual(r.json()["state"], "done")
         self.assertIsNone(self.db.get_active_task(self.uid))
         self.assert_no_server_journal()
@@ -71,8 +76,8 @@ class StorageBoundaryTests(unittest.TestCase):
         self.start_task()
         expected = self.client.get("/api/session/state", params={"user_id": self.uid}).json()
         for path, payload in [("/api/note", {"content": "取快递"}),
-                              ("/api/chat", {"message": "帮我记一下取快递"})]:
-            reply = self.client.post(path, json={"user_id": self.uid, **payload}).json()
+                              ("/api/chat", {"workflow": "legacy", "message": "帮我记一下取快递"})]:
+            reply = self.client.post(path, json={"user_id": self.uid, **({"workflow":"legacy"} if path.endswith("chat") else {}), **payload}).json()
             self.assertEqual(reply["state"], expected["state"])
             self.assertEqual(reply["task"], expected["task"])
             self.assertEqual(self.client.get("/api/session/state",
