@@ -1,3 +1,5 @@
+> 2026-11-08最新：feat/task-presentation-assets基于主线332e192，实施3db389dbd2ab764d4b05b9e8ddc76a662eb70b03。每项独立表现计步、确定性猫/票根、后端30张运行图和状态原包托管/保留、前台300秒仅换走神图协议；186项回归及隔离冒烟通过。队友现有前端/JSON兼容补丁保持，前端新策略与微信验收仍待接入。原票根大包上传中断，未入仓，在/workspace/deliverables/lightstep-original-receipts.zip保留；线上运行不依赖它。底图未提供，不造替代。接口与限制见[task-presentation-assets.md](docs/task-presentation-assets.md)及[handoff](docs/handoff.md)。本轮未合并/部署。
+
 > PR #17追加产品语义修正：AI只拆可执行行动、记录用户自报进度，不检查答案/正确率，不强加理由、留证、自评或质量验收。共享政策用于生成、审核和范围澄清，已有完成接口不评分；用户原目标必要的检查/论证/交付仍保留。实施e9f6fd5a52042bc2ab986a99ef36dc9efdbf8db2，164项回归及4项专项、隔离冒烟通过。新规则用于新生成，不重拆旧森林丢进度；真实AI样例与微信端未验收。详见[action-support](docs/action-support.md)和[handoff](docs/handoff.md)。未合并/部署。
 
 > 最新任务：统一过滤对外AI展示文案，去掉明确内部括号/思考标签，保留任务约束与实际动作。实施3b1ba659887427d32bde796620f6cbc6aeefd917，160项回归与隔离冒烟通过；接口字段/身份/存储不变，仅展示投影。见[public-ai-text.md](docs/public-ai-text.md)与[handoff](docs/handoff.md)。本轮未改前端，未合并/部署；微信排版和真实供应商输出待验收。

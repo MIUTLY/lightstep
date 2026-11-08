@@ -1,3 +1,65 @@
+# 最新交接：独立表现计步、后端公共素材与前台未操作形象协议
+
+2026-11-08。分支feat/task-presentation-assets，基于最新main 332e192aac3bc5fbed2e0e535fa0f3f8c00baede。实施[3db389dbd2ab764d4b05b9e8ddc76a662eb70b03](https://github.com/MIUTLY/lightstep/commit/3db389dbd2ab764d4b05b9e8ddc76a662eb70b03)。本轮未合并/部署。
+
+## 依据与范围
+
+用户本轮规则覆盖旧计时、随机票根、按完成叶子数换猫及原图片名的触发说明。随后确认本轮不恢复5/10分钟预约，只做前台未操作换图和素材规则。按既定分工只改后端、公共素材和文档；前端交给对应成员。
+
+工作中主线从0f2e84e更新到332e192，核对仅后端llm兼容修正及队友前端更新；本分支以新主线为parent/base，保留_model JSON约束与scope占位修正及所有前端文件。复测使用新主线的llm.py，不将它作为本轮自有修改。
+
+## 后端实现
+
+- memo.py：每项presentation_completed_steps初始0，成功complete仅+1，不看轻中重或叶子数量。调整/捕获新增/退出不增加。返回items及focus的presentation；退出回执冻结当前执行号，完成回执冻结最后完成号；增加occurred_date（实际Asia/Shanghai结束日），date仍为清单归属日。
+- presentation.py：正常猫1–3初始、4–6启动、7–9渐入佳境、10起奖励；票根1.1至4.3按当前号对应，13起固定4.3，不随机，不因提前全部完成跳奖励。走神不作为回执选择输入，紧急暗黑不放进自动规则。
+- 计数与森林在同一事务保存，复用request_id/step_id/attempt/revision防重保护。旧项按成功complete历史关联任务session恢复，不按叶子数猜；进度存在但历史丢失时明确presentation.available=false，票根/序号为null，仍可操作旧任务，不能伪造精确步号。
+- focus_capture.py为新增项设置独立0计数；schemas/services为旧TaskView也提供presentation（使用原本按完成操作递增的steps_done）。
+- main.py新增GET /api/assets/manifest及/api/assets/v1/...，图片托管独立于debug UI开关，哈希文件名+不可变缓存。仅挂v1，不暴露原ZIP或用户数据。图片404不影响业务接口。
+- idle_policy仅约定前端前台300秒未操作换走神；操作复原正常图、后台停表、前台重等，不显示继续/结束，不推进/退出任务；单击无动作、双击新增任务不变。后端没有新增idle状态或完成计时器，预约410保持。
+
+## 素材与源码交付
+
+用户状态.zip含6张RGBA状态图；票根(1).zip含12张1696×2528票根。原名与新规则的映射完整记录在manifest及[素材协议](task-presentation-assets.md)，不按原名里的“完成2/5步骤”触发。
+
+运行图为6张512最长边透明PNG、12张1280×1908 JPEG及12张384×572预览，共30张、6,255,753字节；按需加载，不一次加载全部。原状态包2,976,042字节已入仓。原票根包31,351,571字节的大文件上传被中断，未入仓；工作区原包和备份保持完整：/workspace/deliverables/lightstep-original-receipts.zip，用户原附件也保留。manifest记录原包和逐图SHA256。请明确备份原包，不宣称它已上传，后续若入仓/对象存储另行处理。本轮不再重复长时间大包传输。
+
+运行不依赖原包，只需已完整入仓的v1及manifest。需要重建时按originals/README放入外部原票根ZIP，安装requirements-assets.txt的Pillow，再运行scripts/prepare_assets.py；运行服务无需Pillow。原图内容未重画、未填背景，运行版本按比例缩放和编码。手帐底图尚缺，manifest.journal.available=false/background=null，不生成替代。
+
+票根固定日期位置已逐张视觉与OCR检查，尤其4.2日期偏上。composition提供文字区、日期覆盖、空白纸面补丁及实际日期区域。前端必须同一Canvas合成预览和导出，覆盖固定日期再画occurred_date，文字换行/缩字或提示缩短，不截断；此合成尚未代前端实施。
+
+## 测试命令与结果
+
+backend目录：
+```bash
+python -m unittest discover -s . -p 'test_*.py'
+python smoke_test.py
+```
+云环境沿用仓库外TestClient selector辅助，根目录实际执行：
+```bash
+PYTHONDONTWRITEBYTECODE=1 PYTHONPATH=/workspace/work/pr8-runtime:/workspace/work:backend timeout 90s python -m unittest discover -s backend -p 'test_*.py'
+PYTHONDONTWRITEBYTECODE=1 PYTHONPATH=/workspace/work/pr8-runtime:/workspace/work:backend timeout 30s python backend/smoke_test.py
+git diff --check
+```
+最终**186项通过，42.858s**（原164+新增22），隔离SQLite冒烟、AST和diff检查通过。原图归档在工作区均完整，源审计执行而未跳过。另模拟仓库/运行包没有外部原票根ZIP：7项素材/源审计测试成功，明确skip1项仅针对外部原票根源文件的审计；状态原包、30张运行图HTTP/哈希/RGBA、目录隔离和日期覆盖仍检查，运行无原票根依赖。此7项3.390s。
+
+覆盖：全12格及13+封顶、第2步退出选1.2并保留未完成、第3到4步、第1步重任务完成20叶子只记1且不跳4组、全部完成不多加一步、A/B/C独立/重开、resize不计数、重复/过时请求、重复退出、提交失败回滚后重试只计1、旧重任务历史恢复而非叶子推算、历史缺失不猜、跨日结束日期、元数据中的idle-only策略与无操作不写进度、素材可访问/哈希/PNG格式透明通道/缓存、原始包校验、日期框覆盖与文字区不重叠。
+
+测试模型为显式隔离替身，不验证真实供应商质量；idle策略测试不等于微信五分钟实测。
+
+## 队友前端接入与尚未完成
+
+最新主线已有日期轴、书页/翻页、本地图片持久化（localJournal），本轮保留，可复用；不是从零实现本地手帐。仍需接新presentation/素材地址，前台300秒换图、触摸/输入复原/后台重等、单击/双击、下载失败占位与任务按钮解耦。
+
+现有localJournal.addEntry忽略writeAll返回值、静默截断到200条，persistImage失败可能降级空路径；这些不能满足本次失败不假报成功与长期保留规则，需前端修正。每次主动保存用独立page_id追加到日期索引，同一保存重试复用ID；不要按日期或daily_journal事件ID覆盖已有页。日历/同日翻页可复用现有日期轴和书页，仍需重新打开验证。手帐底图待用户补充，不把已有页面纸张擅自当作新大底图。
+
+微信验收未执行：真实五分钟、前后台/触摸/输入、双击、新图片透明边缘/清晰度、HTTPS资源加载失败、预览与保存文字一致/不截断、固定日期覆盖、底图提供后的大底图+回执合成、同日多页/重开/翻页、文件/索引失败不提示成功。后端测试通过不代表这些UI已完成。
+
+原票根源包未入仓与历史表现计数丢失的兼容限制均须保留交接。用户私人文字、合成回执/手帐不上传，不恢复/api/journal*。本轮不自动合并或部署。
+
+---
+
+以下为历史交接；旧计时/前端状态描述以最新规则和主线核对为准。
+
 # 最新追加：AI拆分帮助行动，不验收用户成果
 
 2026-11-07，继续尚未合并PR #17（fix/public-ai-text），基于其a88267d；不另开重复PR。实施[e9f6fd5a52042bc2ab986a99ef36dc9efdbf8db2](https://github.com/MIUTLY/lightstep/commit/e9f6fd5a52042bc2ab986a99ef36dc9efdbf8db2)。
