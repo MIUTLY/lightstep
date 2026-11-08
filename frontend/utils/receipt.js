@@ -190,16 +190,20 @@ export function drawReceipt(ctx, options, done) {
 		ctx.stroke()
 	})
 
-	// 用户写的那一句（放在第一条横线上方）
+	// 用户写的那一句：**坐在横线上**（字的下缘压住线），字号比原来小两档（24 → 20）
 	const written = String(opts.line || '').trim()
 	if (written) {
 		ctx.setFillStyle(c.inkSoft)
-        let size = 24
-        let rows = wrapByWidth(written, RECEIPT_W - 240, size)
-        while (rows.length > 3 && size > 12) { size -= 2; rows = wrapByWidth(written, RECEIPT_W - 240, size) }
-        if (rows.length > 3) throw new Error('文字超出票根区域，请缩短后再保存')
-        ctx.setFontSize(size)
-        rows.forEach((row, i) => ctx.fillText(row, centerX, 648 + i * 52))
+		let size = 20
+		let rows = wrapByWidth(written, RECEIPT_W - 240, size)
+		while (rows.length > 3 && size > 12) {
+			size -= 2
+			rows = wrapByWidth(written, RECEIPT_W - 240, size)
+		}
+		if (rows.length > 3) throw new Error('文字超出票根区域，请缩短后再保存')
+		ctx.setFontSize(size)
+		// 横线在 660 / 712 / 764；基线上抬到线高上方 6px（与票根素材保持同样 5px 上移）
+		rows.forEach((row, i) => ctx.fillText(row, centerX, 654 + i * 52))
 	}
 
 	// 日期
@@ -215,6 +219,52 @@ export function drawReceipt(ctx, options, done) {
 }
 
 /* ================= 后端票根素材（2026-11-08 起） ================= */
+
+/**
+ * 计算「用户那句话」在票根底图上的落笔位置。
+ *
+ * 票根底图上其实已经印好了三条横线（写给自己的一句话下面），文字要像手写一样**坐在线上**，
+ * 而不是像原来那样从文字框顶部往下排、悬在两条线中间。
+ *
+ * 线位优先用素材给的 `composition.text_baselines`；没给的素材按实测规律推算：
+ * 第一条在文字框顶部往下 30% 处，行距约 54% 文字框高度（12 张票根实测行距 126~136）。
+ *
+ * 字号也比原来小两档：原来按文字框高度取（最大 44，字比行距还大），
+ * 现在按**行距**取（约 0.62 行距，上限 34），刚好是「一行字压在一行线上」的比例。
+ *
+ * @param {Object} comp  composition（坐标空间 1696×2528）
+ * @param {string} text  用户写的话
+ * @returns {{size:number, x:number, rows:{text:string,y:number}[]}|null}
+ */
+export function artTextLayout(comp, text) {
+	const c = comp || {}
+	const written = String(text || '').trim()
+	const tb = c.text_box || {}
+	const space = Array.isArray(c.coordinate_space) ? c.coordinate_space : [1696, 2528]
+	const sx = RECEIPT_W / (Number(space[0]) || 1696)
+	const sy = RECEIPT_H / (Number(space[1]) || 2528)
+	const boxW = (Number(tb.width) || 0) * sx
+	if (!written || !boxW) return null
+	const declared = Array.isArray(c.text_baselines) ? c.text_baselines.map(Number).filter((n) => n > 0) : []
+	const firstLine = declared.length ? declared[0] : (Number(tb.y) || 0) + (Number(tb.height) || 0) * 0.30
+	const spacing = declared.length > 1 ? declared[1] - declared[0] : (Number(tb.height) || 0) * 0.54
+	const slots = Math.max(1, declared.length || 3)
+	let size = Math.max(12, Math.min(Math.round(spacing * sy * 0.62), 34))
+	let rows = []
+	for (let guard = 0; guard < 24; guard += 1) {
+		rows = wrapByWidth(written, boxW, size)
+		if (rows.length <= slots || size <= 12) break
+		size -= 2
+	}
+	if (rows.length > slots) throw new Error('文字超出票根区域，请缩短后再保存')
+	return {
+		size,
+		x: (Number(tb.x) || 0) * sx,
+		// 基线比线高高 3px：字形下缘刚好坐在印好的横线上、不压线。
+		// 位置按用户反馈逐步微调过（+2 → -2 → -3，累计上移 5px）。
+		rows: rows.map((row, i) => ({ text: row, y: (firstLine + i * spacing) * sy - 3 }))
+	}
+}
 
 /**
  * 把后端下发的票根素材画到 canvas（预览与导出共用这一套合成）。
@@ -288,27 +338,14 @@ export function drawArtReceipt(ctx, options, done) {
 		ctx.setTextAlign('left')
 	}
 
-	// 3. 用户文字：先换行，再按需要缩字号
-	const written = String(opts.line || '').trim()
-	const textBox = box(comp.text_box)
-	if (written && textBox.w && textBox.h) {
-		const maxW = textBox.w * sx
-		const maxH = textBox.h * sy
-		// 起点按文字框高度给（先大后小），再用「行数×行高」和宽度约束往下缩
-		let size = Math.max(12, Math.min(Math.round(maxH * 0.6), 44))
-		let lines = []
-		for (let guard = 0; guard < 24; guard += 1) {
-			lines = wrapByWidth(written, maxW, size)
-			if (lines.length * size * 1.5 <= maxH || size <= 12) break
-			size -= 2
-		}
-		if (lines.length * size * 1.5 > maxH) throw new Error('文字超出票根区域，请缩短后再保存')
+	// 3. 用户文字：写在票根印好的横线上（字号比原来小两档）
+	const layout = artTextLayout(comp, opts.line)
+	if (layout) {
 		ctx.setFillStyle('#3d3d3d')
-		ctx.setFontSize(size)
+		ctx.setFontSize(layout.size)
 		ctx.setTextAlign('left')
-		const startY = textBox.y * sy + size
-		lines.forEach((line, i) => {
-			ctx.fillText(line, textBox.x * sx, startY + i * size * 1.5)
+		layout.rows.forEach((row) => {
+			ctx.fillText(row.text, layout.x, row.y)
 		})
 	}
 

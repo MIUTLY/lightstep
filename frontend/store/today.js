@@ -233,8 +233,14 @@ export const useToday = defineStore('today', {
 			/** 轻一点 / 重一点 */
 			async resize(direction, stepId) {
 				const f = state.focus
-				if (!f) return null
-				return wrap(() =>
+				if (!f) {
+					console.warn('[today] resize 被跳过：当前没有 focus')
+					return null
+				}
+				// 诊断用：把真正发出去的参数和结果都打出来（问题定位完可以删）
+				console.log('[today] resize 发送', { direction, session_id: f.session_id,
+					step_id: stepId || (f.step && f.step.step_id) })
+				const view = await wrap(() =>
 					api.todayCommand({
 						user_id: uid(),
 						request_id: newRequestId(),
@@ -244,6 +250,9 @@ export const useToday = defineStore('today', {
 						direction
 					})
 				)
+				console.log('[today] resize 返回', view && view.operation || null,
+					'| lastError:', state.lastError || '(无)')
+				return view
 			},
 
 			/** 中途结束本轮（保留森林与进度，回备忘录） */

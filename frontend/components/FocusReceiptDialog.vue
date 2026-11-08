@@ -97,6 +97,9 @@ function close() {
 .receipt-dialog{background:#fbf8f2;width:94vw;max-height:94vh;border-radius:24rpx;overflow:hidden}
 .receipt-head{display:flex;justify-content:space-between;padding:24rpx;color:#54483c}
 .receipt-body{height:80vh}.receipt-facts{display:block;padding:16rpx 24rpx;color:#6b6055}
-.receipt-preview{margin:0 auto;transform-origin:top left}.receipt-writing{margin:24rpx;width:calc(100% - 48rpx);min-height:120rpx;background:repeating-linear-gradient(transparent,transparent 37rpx,#d9cfc1 38rpx);line-height:38rpx;color:#3d3d3d}
+.receipt-preview{margin:0 auto;transform-origin:top left}/* 输入框做成「有横线的纸」：字号比正文小两档（30 → 24rpx），
+   行高 40rpx，横线画在每行**基线上**（相对行顶 27rpx；基线 ≈ (40-24)/2 + 0.8×24 ≈ 27），
+   这样光标和字都压在线上，而不是浮在两条线中间。 */
+.receipt-writing{margin:24rpx;box-sizing:border-box;width:calc(100% - 48rpx);min-height:120rpx;padding:8rpx 10rpx;font-size:24rpx;line-height:40rpx;color:#3d3d3d;background:repeating-linear-gradient(to bottom,transparent 0,transparent 27rpx,#d9cfc1 27rpx,#d9cfc1 28rpx,transparent 28rpx,transparent 40rpx)}
 .receipt-save{margin:24rpx;padding:24rpx;background:#dd9a39;color:white;text-align:center;border-radius:16rpx}.receipt-error{display:block;margin:20rpx;color:#8b4939}
 </style>

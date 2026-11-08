@@ -20,10 +20,12 @@
 			<text class="task-title" :class="titleSizeClass">{{ taskTitle }}</text>
 		</view>
 
-		<!-- 当前这一步：设计稿里没有这一段，按产品需要单独放在标题下方（居中、不参与按钮定位） -->
-		<view v-if="currentStep" class="task-step">
+		<!-- 当前这一步：设计稿里没有这一段，按产品需要单独放在标题下方。
+		     父任务的明细会被后端拼成很多行（实测 10 行），所以这里限高 + 内部滚动：
+		     超过高度就在框里滚，不会往下长到按钮那一层去盖住按钮。 -->
+		<scroll-view v-if="currentStep" class="task-step" scroll-y>
 			<text>{{ currentStep }}</text>
-		</view>
+		</scroll-view>
 
 		<!-- 待澄清提示：落位在设计稿标题与「完成了」之间的空档（y 230~406rpx），
 		     不压住三个按钮，也不用把下面的按钮往下推 -->
@@ -32,7 +34,8 @@
 			<text class="clarify-hint">回上一页把范围补一句，再回来开专注。</text>
 		</view>
 
-		<!-- 三个操作按钮：绝对坐标照抄设计稿，不再靠上下 margin 堆叠 -->
+		<!-- 三个操作按钮：整体下移到「这一步」文字与地板之间的空白带（y≈706rpx 起），
+		     不再和长文字抢同一块地方 -->
 		<view class="pills">
 			<view class="pill pill-done" :class="{ disabled: today.busy || transitionBusy || !hasFocus }" hover-class="pill-hover" @tap.stop="onDone">
 				<text class="pill-text pill-text-done">完成了</text>
@@ -378,15 +381,32 @@ async function retryNextTask() {
 }
 
 async function onLighter() {
-	if (today.busy || transitionBusy || !hasFocus.value) return
-	noteActivity()
-	await today.resize('smaller')
+	// 诊断用：先打一行日志，能区分「点击没进来」还是「进来了但状态不允许」
+	console.log('[focus] tap 轻一点', { busy: today.busy, transition: transitionBusy.value, hasFocus: hasFocus.value })
+	if (today.busy || transitionBusy) return
+	if (!hasFocus.value) { uni.showToast({ title: '这一步还没开始，先回清单点一下', icon: 'none' }); return }
+	try { noteActivity() } catch (e) { console.error('[focus] noteActivity 出错', e) }
+	try {
+		const view = await today.resize('smaller')
+		console.log('[focus] 轻一点 结果', view && view.operation || null, '| lastError:', today.lastError || '(无)')
+	} catch (e) {
+		console.error('[focus] 轻一点失败', e)
+		uni.showToast({ title: e.message || '没调成，请重试', icon: 'none' })
+	}
 }
 
 async function onHeavier() {
-	if (today.busy || transitionBusy || !hasFocus.value) return
-	noteActivity()
-	await today.resize('bigger')
+	console.log('[focus] tap 重一点', { busy: today.busy, transition: transitionBusy.value, hasFocus: hasFocus.value })
+	if (today.busy || transitionBusy) return
+	if (!hasFocus.value) { uni.showToast({ title: '这一步还没开始，先回清单点一下', icon: 'none' }); return }
+	try { noteActivity() } catch (e) { console.error('[focus] noteActivity 出错', e) }
+	try {
+		const view = await today.resize('bigger')
+		console.log('[focus] 重一点 结果', view && view.operation || null, '| lastError:', today.lastError || '(无)')
+	} catch (e) {
+		console.error('[focus] 重一点失败', e)
+		uni.showToast({ title: e.message || '没调成，请重试', icon: 'none' })
+	}
 }
 
 /* ---------------- 就到这儿吧 ---------------- */
@@ -708,11 +728,15 @@ function backToChat() {
 	letter-spacing: 0;
 }
 
+/* 「当前这一步」：从标题下方 220rpx 到按钮上方 690rpx 之间的一块固定区域。
+   父任务明细可能有一屏多（实测 10 行 ≈ 380rpx），限高后内部滚动，
+   保证**任何长度都不会压到下面的三个按钮**。 */
 .task-step {
 	position: absolute;
 	left: 95rpx;
 	top: 220rpx;
 	width: 560rpx;
+	height: 470rpx;
 	z-index: 3;
 }
 
@@ -760,15 +784,21 @@ function backToChat() {
 
 /* ---------- 竖向三个胶囊 ---------- */
 
-/* 容器只做定位基准（高度 0）：三个按钮全部用设计稿绝对坐标，
-   这样标题换成两行、或出现澄清卡片时，按钮位置都不会被推动 */
+/* 容器只做定位基准（高度 0）：三个按钮全部绝对坐标，标题换成两行、或出现澄清卡片时位置都不会被推动。
+   整组从 416rpx 下移到 716rpx —— 落进「这一步文字（到 690rpx 为止）」与「地板线（约 1016rpx）」之间的空白带：
+   按钮纵向占 716~992rpx，上离文字 26rpx、下离地板 24rpx；粉色便签到 697rpx 结束、桌宠从 1133rpx 起，都不碰。
+   z-index 给到 20：这一带没有任何别的可见控件，所以让按钮**盖在所有东西之上**最稳
+   （桌宠容器 394×366 的透明区域也会吃点击，2026-11-08 就因此出现过「重一点/轻一点点不动」）。 */
 .pills {
 	position: absolute;
 	left: 0;
-	top: 416rpx;
+	top: 716rpx;
 	width: 100%;
-	height: 0;
-	z-index: 2;
+	/* 以前这里是 0 高（只当定位基准）。小程序对「高度 0 的父节点 + 绝对定位子节点」的点击命中
+	   在个别机型/基础库上不稳定，所以这里给它一个**真实高度**（716→992rpx），
+	   让三个胶囊都落在这个盒子里，命中更可靠；这一带没有别的可点元素，不会挡到别人。 */
+	height: 276rpx;
+	z-index: 20;
 }
 
 .pill {
@@ -854,12 +884,16 @@ function backToChat() {
 
 /* 地板上的小猫：设计稿 404×375 @ (364, 813) → 394×366，右边缘贴齐画布（right: 0），
    距画布底边 188px → 184rpx。设计稿里它是静态装饰，所以这里没有任何点击态/悬停态 */
-/* 地板猫 / 桌宠：固定容器 + aspectFit，换状态图时容器尺寸不变，点击区域不跳 */
+/* 地板猫 / 桌宠：固定容器 + aspectFit，换状态图时容器尺寸不变，点击区域不跳。
+   ⚠️ z-index 必须**低于** .pills（2）：这个容器是 394×366 的一大块，PNG 上半部分是透明的，
+   但**透明区域照样吃点击**。之前是 z-index 6，按钮下移到 716rpx 之后，在矮屏手机上
+   「重一点 / 轻一点」正好落进桌宠那块看不见的盒子里 → 看着好好的却点不动（2026-11-08 实测）。
+   放进 z-index 1 之后：按钮在重叠区里优先接收点击，桌宠在按钮以外的区域照常可点。 */
 .floor-cat {
 	position: absolute;
 	right: 0;
 	bottom: 184rpx;
-	z-index: 6;
+	z-index: 1;
 	width: 394rpx;
 	height: 366rpx;
 }
