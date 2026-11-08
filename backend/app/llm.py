@@ -1,5 +1,6 @@
 """Real OpenAI-compatible provider. No offline task provider or template fallback."""
 import json
+import sys
 from time import monotonic, sleep
 from contextvars import ContextVar
 
@@ -44,22 +45,26 @@ class OpenAICompatLLM:
     # 只有「失败得很快」的错误才值得重试：连接被重置通常 < 1s 就返回，
     # 而读到超时（几十秒）说明模型真的慢，再试一次只会把总耗时翻倍、
     # 反而让前端先超时（2026-11-08 实测：一次 45s 超时 + 重试 45s > 前端 60s 超时）。
-    # 快失败放宽到 3 次（每次之间歇 250ms）：演示时连续快速提问，DeepSeek 偶尔会连断两下，
-    # 两次重试都救不回来就整句失败；3 次能把这类瞬时抖动吃掉，最坏仍是 ≤6s×3+0.5s ≈ 19s。
-    RETRY_IF_FASTER_THAN = 6.0
+    # 快失败给 5 次机会（间隔 0.3/0.8/1.4/2.0s）：演示时连续快速提问，DeepSeek 偶尔会连着断好几下。
+    RETRY_IF_FASTER_THAN = 10.0
     RETRY_MIN_BUDGET = 8.0
-    RETRY_SLEEP = 0.25
+    RETRY_SLEEPS = (0.3, 0.8, 1.4, 2.0)
+    # TCP 建连超时单独压到 8s：这台机器到 api.deepseek.com 偶发 SYN 被丢，
+    # Windows 要等 ~21s 才报 ConnectError（实测就是 21.8s / 22.7s 才失败），
+    # 压到 8s 后能更早发现、把剩下的预算留给重试。
+    CONNECT_TIMEOUT = 8.0
 
     def _post_completion(self, payload, timeout_value, deadline=None):
-        """向 OpenAI 兼容接口发一次聊天请求；**快速失败时自动重试（最多 3 次）**。
+        """向 OpenAI 兼容接口发一次聊天请求；**快速失败时按递进间隔重试**。
 
         兼容性补丁（本地，覆盖后端时会被冲掉，需重打）：
-        实测这台机器到 DeepSeek 的连接偶尔会被重置（一次对话要串行调十几次模型，
+        实测这台机器到 DeepSeek 的连接偶尔被重置 / SYN 被丢（一次对话要串行调十几次模型，
         任何一次抖动都会让整句回复变成「暂时连接不上AI」）。这里对 httpx.RequestError
-        做重试，但**仅当上一次是快速失败**，保证最坏总耗时仍远小于前端 60s 超时。
-        不改变对外的错误码语义。
+        做重试，但**仅当上一次失败得不算慢**（≤10s）且还剩够预算，保证最坏总耗时仍小于
+        AI_DEADLINE（chat 整条链 45s）与前端 60s 超时。不改变对外的错误码语义；
+        每次重试往 stderr 打一行（只有异常类型和耗时，不含密钥）。
         """
-        attempts = 3
+        attempts = len(self.RETRY_SLEEPS) + 1
         last = None
         for attempt in range(attempts):
             t = timeout_value
@@ -67,10 +72,11 @@ class OpenAICompatLLM:
                 t = min(t, deadline - monotonic())
                 if t <= 0:
                     raise httpx.TimeoutException("deadline exceeded")
+            timeout = httpx.Timeout(t, connect=min(self.CONNECT_TIMEOUT, t))
             started = monotonic()
             try:
                 response = httpx.post(f"{self.base_url}/chat/completions", json=payload,
-                    headers={"Authorization": f"Bearer {self.api_key}"}, timeout=t)
+                    headers={"Authorization": f"Bearer {self.api_key}"}, timeout=timeout)
                 response.raise_for_status()
                 return response
             except httpx.HTTPStatusError:
@@ -79,13 +85,15 @@ class OpenAICompatLLM:
             except httpx.RequestError as error:
                 last = error
                 elapsed = monotonic() - started
+                print(f"[llm] network error {type(error).__name__} after {elapsed:.1f}s "
+                      f"(attempt {attempt + 1}/{attempts})", file=sys.stderr, flush=True)
                 if attempt + 1 >= attempts:
                     raise
                 if elapsed > self.RETRY_IF_FASTER_THAN:
                     raise
                 if deadline is not None and deadline - monotonic() <= self.RETRY_MIN_BUDGET:
                     raise
-                sleep(self.RETRY_SLEEP)
+                sleep(self.RETRY_SLEEPS[attempt])
         raise last
 
     def _chat(self, system, user, *, json_mode=False, max_tokens=None, timeout=None):
