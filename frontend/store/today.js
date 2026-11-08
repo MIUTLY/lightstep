@@ -73,6 +73,11 @@ export const useToday = defineStore('today', {
 		navigation: { sidebar_locked: false, can_collapse_focus: true },
 		/** 最近一次的事件（receipt / daily_journal） */
 		events: [],
+		/**
+		 * 表现素材策略（2026-11-08 后端新增字段）：
+		 * { catalogue_url:'/api/assets/manifest', idle_timeout_seconds:300, idle_effect:'pet_image_only' }
+		 */
+		presentationPolicy: null,
 		/** 最近一次操作结果：{ request_id, status, error } */
 		operation: null,
 		/**
@@ -116,6 +121,8 @@ export const useToday = defineStore('today', {
 			state.todayAllCompleted = !!view.today_all_completed
 			if (view.navigation) state.navigation = view.navigation
 			state.events = Array.isArray(view.events) ? view.events : []
+			// 2026-11-08：表现素材策略（空闲换走神图的秒数等）
+			if (view.presentation_policy) state.presentationPolicy = view.presentation_policy
 			state.operation = view.operation || null
 			state.loaded = true
 		}
@@ -318,6 +325,27 @@ export const useToday = defineStore('today', {
 				const f = state.focus
 				const p = f && f.progress
 				return p && Array.isArray(p.completed_actions) ? p.completed_actions : []
+			},
+
+			/**
+			 * 当前专注项的表现数据（桌宠 + 该印的票根）。
+			 * 形如 { available, completed_steps, step_number, normal_stage, normal_pet, receipt, … }
+			 * 后端没给（旧数据）时返回 null，页面用中性缺图。
+			 */
+			focusPresentation() {
+				const f = state.focus
+				return (f && f.presentation) || null
+			},
+
+			/** 某一项的 presentation（备忘录列表用） */
+			itemPresentation(itemId) {
+				const item = (state.items || []).find((x) => x.id === itemId)
+				return (item && item.presentation) || null
+			},
+
+			/** 表现素材策略（空闲秒数等） */
+			policy() {
+				return state.presentationPolicy || null
 			}
 		}
 	}

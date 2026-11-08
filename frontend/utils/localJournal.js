@@ -11,7 +11,8 @@
  *   [
  *     {
  *       id: 'l_xxx',              // 本地自增 id
- *       date: '2026-11-07',       // 当天日期
+ *       date: '2026-11-07',       // 清单归属日
+ *       occurred_date: '2026-11-07', // 实际结束日（2026-11-08 后端 receipt 事件新增，跨天时与 date 不同）
  *       steps_done: 3,            // 这张回执对应的今日步数
  *       titles: ['写论文'],        // 当天做过的任务
  *       note: '今天其实有点累',     // 用户手写的一句话，可为空
@@ -24,7 +25,7 @@ import { todayCN } from '@/utils/format.js'
 
 const STORAGE_KEY = 'lightstep_local_journal'
 /** 手帐最多保留多少条（防止无限膨胀；产品不统计，所以不做提示） */
-const MAX_ENTRIES = 200
+const MAX_ENTRIES = 500
 
 function readAll() {
 	try {
@@ -56,13 +57,21 @@ export function listEntries() {
 }
 
 /**
- * 新增一条手帐。返回这条记录（失败返回 null）。
- * @param {Object} entry { steps_done, titles, note, imagePath, date }
+ * 新增一条手帐。写入成功返回这条记录，**写失败返回 null**。
+ *
+ * ⚠️ 2026-11-08 后端协议（docs/task-presentation-assets.md）要求：
+ *   保存失败不能提示成功；同日多页要追加、不能用 date 当唯一页键覆盖旧页。
+ *   所以这里必须把 writeAll 的结果返回给调用方，不能假装存好了。
+ *
+ * @param {Object} entry { steps_done, titles, note, imagePath, date, occurred_date }
  */
 export function addEntry(entry = {}) {
+	const occurred = String(entry.occurred_date || '').trim()
 	const record = {
 		id: nextId(),
-		date: entry.date || todayCN().replace(/\./g, '-'),
+		// date 仍是「清单归属日」，occurred_date 是实际结束日（跨天时两者不同）
+		date: entry.date || (occurred ? occurred : todayCN().replace(/\./g, '-')),
+		occurred_date: occurred || entry.date || todayCN().replace(/\./g, '-'),
 		steps_done: Number(entry.steps_done) || 0,
 		titles: Array.isArray(entry.titles) ? entry.titles : [],
 		note: String(entry.note || '').trim(),
@@ -71,7 +80,7 @@ export function addEntry(entry = {}) {
 	}
 	const list = readAll()
 	list.unshift(record)
-	writeAll(list.slice(0, MAX_ENTRIES))
+	if (!writeAll(list.slice(0, MAX_ENTRIES))) return null
 	return record
 }
 
