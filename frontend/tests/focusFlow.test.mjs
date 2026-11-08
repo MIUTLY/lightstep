@@ -67,3 +67,12 @@ test('旧回执暂存后，新一轮结束优先显示本轮而不是旧回执',
  today.end=async()=>apply(view(null,[{kind:'receipt',id:'new-receipt',title:'新任务',outcome:'interrupted'}]))
  await flow.end();assert.notEqual(flow.pending().id,old.id);assert.equal(flow.pending().receipts[0].id,'new-receipt')
 })
+
+test('源码里不能出现裸 uni（mp-weixin 编译器不会改写裸标识符，运行时会 ReferenceError）',async()=>{
+ const {readFile}=await import('node:fs/promises')
+ const src=await readFile(new URL('../utils/focusFlow.js',import.meta.url),'utf8')
+ // 默认参数 / 赋值右侧的裸 uni 不会被编译成 common_vendor.index，只有 uni.xxx 成员访问会
+ assert.equal(/=\s*uni\b(?!\s*\.)/.test(src),false,'focusFlow.js 不能把裸 uni 当作值使用')
+ assert.equal(/storage\s*=\s*uni\b/.test(src),false,'storage 默认值必须延迟到调用时再取 uni.xxx')
+})
+
