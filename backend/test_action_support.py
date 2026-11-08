@@ -31,9 +31,23 @@ class ActionSupportTests(unittest.TestCase):
         ai=OpenAICompatLLM(Settings(llm_api_key='test'))
         bad={'trees':[{'text':'做题','children':[{'text':'作答并交理由','children':[{'text':'额外记录选项和理由'}]}]}]}
         review={'decision':'reject','relevant':False,'coverage':True,'parent_child_consistent':True,'no_duplicates':True}
-        with patch.object(ai,'_chat',side_effect=[json.dumps(bad),json.dumps(review)]),self.assertRaises(AIError) as error:
+        # 复核驳回后会重试（最多 3 轮「生成+复核」），给足 3 轮响应；最终仍然要如实报错
+        with patch.object(ai,'_chat',side_effect=[json.dumps(bad),json.dumps(review)]*3) as calls,self.assertRaises(AIError) as error:
             ai.decompose('做一道选择题')
         self.assertEqual(error.exception.code,'AI_CONTENT_INVALID')
+        self.assertEqual(calls.call_count,6)
+    def test_plan_review_retry_can_recover(self):
+        """第一轮复核驳回、第二轮通过：应该拿到计划而不是把用户挡在门外。"""
+        ai=OpenAICompatLLM(Settings(llm_api_key='test'))
+        bad={'trees':[{'text':'做题','children':[{'text':'作答并交理由','children':[{'text':'额外记录选项和理由'}]}]}]}
+        reject={'decision':'reject','relevant':False,'coverage':True,'parent_child_consistent':True,'no_duplicates':True}
+        accept={'decision':'accept','relevant':True,'coverage':True,'parent_child_consistent':True,'no_duplicates':True}
+        with patch.object(ai,'_chat',side_effect=[json.dumps(bad),json.dumps(reject),json.dumps(ten()),json.dumps(accept)]) as calls:
+            forest=ai.decompose('做十道数学题')
+        self.assertIn('trees',forest)
+        self.assertEqual(calls.call_count,4)
+        # 第二轮提示里应该带上上一轮被判不合格的原因
+        self.assertIn('复核判定不合格',calls.call_args_list[2].args[0])
     def test_manual_done_requires_no_answer_correctness_or_ai_call(self):
         with tempfile.TemporaryDirectory() as tmp:
             db=DB(str(Path(tmp)/'test.db'));ai=Fake()

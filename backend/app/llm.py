@@ -111,7 +111,10 @@ class OpenAICompatLLM:
             if timeout <= 0:
                 raise AIError('AI_TIMEOUT', 'AI响应超时，请重试。', 504)
         payload = {
-            "model": self.model, "temperature": self.temperature,
+            "model": self.model,
+            # 结构化输出（json_object）用低温更容易守 schema：实测 0.7 时 deepseek-chat
+            # 经常输出层级/字段不合规的内容；低温只作用于 json 调用，聊天回复不受影响。
+            "temperature": min(self.temperature, 0.2) if json_mode else self.temperature,
             "max_tokens": self.max_tokens if max_tokens is None else max_tokens,
             "messages": [{"role": "system", "content": system}, {"role": "user", "content": user}],
         }
@@ -163,25 +166,48 @@ class OpenAICompatLLM:
                 raise AIError("AI_TIMEOUT", "AI响应超时，尚未生成新任务。请重试。", 504)
             return json.loads(raw)
 
-        try:
-            data = request(DECOMPOSE_PROMPT, {"original_goal": title})
-            if isinstance(data, dict) and set(data) == {"clarification"}:
-                question = data["clarification"]
-                if not isinstance(question, str) or not question.strip() or len(question) > 300:
-                    raise ValueError("invalid clarification")
-                raise Clarification(question.strip())
-            forest = validate_blueprint(data)
-            review = request(REVIEW_PROMPT, {"original_goal": title, "forest": forest})
-            required = {"decision", "relevant", "coverage", "parent_child_consistent", "no_duplicates"}
-            if not isinstance(review, dict) or set(review) != required or review["decision"] not in ("accept", "reject"):
-                raise ValueError("invalid review")
-            if any(type(review[k]) is not bool for k in required - {"decision"}):
-                raise ValueError("invalid review checks")
-            if review["decision"] != "accept" or not all(review[k] for k in required - {"decision"}):
-                raise AIError("AI_CONTENT_INVALID", "AI拆分没有通过目标与父子关系检查，尚未替换任务。请重试或补充目标。")
-            return forest
-        except (ValueError, KeyError, TypeError, RecursionError):
-            raise invalid_response() from None
+        # 兼容性补丁（本地，覆盖后端时会被冲掉，需重打）：
+        # 实测 deepseek-chat 的结构化输出不稳定：同一个目标，3 次里有 1~2 次字段/层级不合格，
+        # 或者复核（REVIEW_PROMPT）把本来没问题的计划判成 reject，用户就看到
+        # 「AI拆分没有通过目标与父子关系检查」。这里对「结构不合格 / 复核驳回」重试，
+        # 并把上一次的问题写进下一轮的提示；网络与超时错误不在此重试（由 _post_completion 管）。
+        hint = ""
+        content_invalid = None
+        for _ in range(3):
+            # 「生成 + 复核」至少要两次调用，剩不到 8 秒就没意义了，直接认输
+            if deadline - monotonic() < 8:
+                break
+            try:
+                data = request(DECOMPOSE_PROMPT + hint, {"original_goal": title})
+                if isinstance(data, dict) and set(data) == {"clarification"}:
+                    question = data["clarification"]
+                    if not isinstance(question, str) or not question.strip() or len(question) > 300:
+                        raise ValueError("invalid clarification")
+                    raise Clarification(question.strip())
+                forest = validate_blueprint(data)
+                review = request(REVIEW_PROMPT, {"original_goal": title, "forest": forest})
+                required = {"decision", "relevant", "coverage", "parent_child_consistent", "no_duplicates"}
+                if not isinstance(review, dict) or set(review) != required or review["decision"] not in ("accept", "reject"):
+                    raise ValueError("invalid review")
+                if any(type(review[k]) is not bool for k in required - {"decision"}):
+                    raise ValueError("invalid review checks")
+                if review["decision"] != "accept" or not all(review[k] for k in required - {"decision"}):
+                    failed = [k for k in ("relevant", "coverage", "parent_child_consistent", "no_duplicates")
+                              if not review.get(k)]
+                    hint = ("\n上一次的拆分被复核判定不合格（" + ("、".join(failed) or "decision=reject")
+                            + "）。请重新拆分：子步骤要真实覆盖目标约定的动作范围，不要缩成只打开材料，也不要重复。")
+                    content_invalid = AIError("AI_CONTENT_INVALID",
+                        "AI拆分没有通过目标与父子关系检查，尚未替换任务。请重试或补充目标。")
+                    continue
+                return forest
+            except (ValueError, KeyError, TypeError, RecursionError) as error:
+                hint = (f"\n上一次输出不合格：{error}。请严格按照规定的字段与层级重新输出，"
+                        "只返回一个合法 json 对象。")
+                content_invalid = None
+                continue
+        if content_invalid is not None:
+            raise content_invalid
+        raise invalid_response()
 
     def reply(self, situation, text):
         reply = display_text(self._chat(PERSONA_SYSTEM, REPLY_PROMPT.format(situation=situation, text=text)))
