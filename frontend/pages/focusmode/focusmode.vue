@@ -380,33 +380,27 @@ async function retryNextTask() {
     finally { transitionBusy.value = false }
 }
 
-async function onLighter() {
-	// 诊断用：先打一行日志，能区分「点击没进来」还是「进来了但状态不允许」
-	console.log('[focus] tap 轻一点', { busy: today.busy, transition: transitionBusy.value, hasFocus: hasFocus.value })
-	if (today.busy || transitionBusy) return
+async function resizeCurrentStep(direction) {
+	// Script code must read ref.value; the ref object itself is always truthy.
+	if (today.busy || transitionBusy.value || exiting.value) return
 	if (!hasFocus.value) { uni.showToast({ title: '这一步还没开始，先回清单点一下', icon: 'none' }); return }
 	try { noteActivity() } catch (e) { console.error('[focus] noteActivity 出错', e) }
 	try {
-		const view = await today.resize('smaller')
-		console.log('[focus] 轻一点 结果', view && view.operation || null, '| lastError:', today.lastError || '(无)')
+		const view = await today.resize(direction)
+		if (!view || (view.operation && view.operation.status === 'failed')) {
+			uni.showToast({ title: today.lastError || '这次没能调整，请重试', icon: 'none' })
+		}
 	} catch (e) {
-		console.error('[focus] 轻一点失败', e)
-		uni.showToast({ title: e.message || '没调成，请重试', icon: 'none' })
+		uni.showToast({ title: (e && e.message) || '这次没能调整，请重试', icon: 'none' })
 	}
 }
 
-async function onHeavier() {
-	console.log('[focus] tap 重一点', { busy: today.busy, transition: transitionBusy.value, hasFocus: hasFocus.value })
-	if (today.busy || transitionBusy) return
-	if (!hasFocus.value) { uni.showToast({ title: '这一步还没开始，先回清单点一下', icon: 'none' }); return }
-	try { noteActivity() } catch (e) { console.error('[focus] noteActivity 出错', e) }
-	try {
-		const view = await today.resize('bigger')
-		console.log('[focus] 重一点 结果', view && view.operation || null, '| lastError:', today.lastError || '(无)')
-	} catch (e) {
-		console.error('[focus] 重一点失败', e)
-		uni.showToast({ title: e.message || '没调成，请重试', icon: 'none' })
-	}
+function onLighter() {
+	return resizeCurrentStep('smaller')
+}
+
+function onHeavier() {
+	return resizeCurrentStep('bigger')
 }
 
 /* ---------------- 就到这儿吧 ---------------- */

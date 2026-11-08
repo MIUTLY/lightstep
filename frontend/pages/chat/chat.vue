@@ -114,7 +114,7 @@
 			<SideDrawer ref="drawer" :edge-handle="false" current="chat" />
 
 			<SoftLine :text="recallText" />
-            <FocusReceiptDialog :round="pendingReceiptRound" :flow="focusFlow" @closed="closeReceiptDialog" />
+            <FocusReceiptDialog v-if="pendingReceiptRound" :round="pendingReceiptRound" :flow="focusFlow" @closed="closeReceiptDialog" />
 		</view>
 	</view>
 </template>
