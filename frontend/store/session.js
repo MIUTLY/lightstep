@@ -384,6 +384,26 @@ export const useSession = defineStore('session', {
 			/** 彻底清空本地会话视图（不清后端数据） */
 			clearMessages() {
 				state.messages = []
+			},
+
+			/**
+			 * 换用户 / 需要重来时把旧会话整套清掉（只清前端内存，不动后端）。
+			 * 由设置页「换一个人」调用，避免新用户还看到上一个人的气泡和任务。
+			 */
+			reset() {
+				state.messages = []
+				state.hasTalked = false
+				state.state = 'idle'
+				state.task = null
+				state.busy = false
+				state.noteMode = false
+				state.stepStartedAt = 0
+				state.lastStepKey = ''
+				state.reminders = []
+				state.generation = null
+				state.navIntent = null
+				state.lastError = ''
+				state.opened = false
 			}
 		}
 	}

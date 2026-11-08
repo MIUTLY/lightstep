@@ -346,6 +346,47 @@ export const useToday = defineStore('today', {
 			/** 表现素材策略（空闲秒数等） */
 			policy() {
 				return state.presentationPolicy || null
+			},
+
+			/**
+			 * 换用户 / 需要重来时把内存里的清单视图清空。
+			 *
+			 * ⚠️ 必须同时把 revision 归零：apply() 有「低 revision 不覆盖高 revision」的守卫，
+			 * 换人后新用户的 revision 是 0，不清零的话那份空清单会被丢掉，
+			 * 页面上还留着上一个人的任务（实测就是这样）。
+			 * 只清本地视图，不动后端数据（后端按 user_id 隔离）。
+			 */
+			reset() {
+				state.state = 'memo'
+				state.revision = 0
+				state.date = ''
+				state.todayDate = ''
+				state.availableDates = []
+				state.items = []
+				state.focus = null
+				state.clarifications = []
+				state.canEnterFocus = true
+				state.suggestedItemId = ''
+				state.reply = ''
+				state.allCompleted = false
+				state.todayAllCompleted = false
+				state.navigation = { sidebar_locked: false, can_collapse_focus: true }
+				state.events = []
+				state.presentationPolicy = null
+				state.operation = null
+				state.pendingSelect = null
+				state.busy = false
+				state.lastError = ''
+				state.loaded = false
+			},
+
+			/** 清掉「哪些事件已经处理过」的本地去重记录（换用户 / 清手账时用） */
+			clearEventCache() {
+				try {
+					uni.removeStorageSync(ACKED_KEY)
+				} catch (e) {
+					/* ignore */
+				}
 			}
 		}
 	}

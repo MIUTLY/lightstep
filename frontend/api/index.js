@@ -79,13 +79,49 @@ export function openSession(user_id) {
  * @param {string} message
  * @param {{request_id?: string, workflow?: 'today'|'legacy'}} [opts]
  */
-export function chat(user_id, message, opts = {}) {
+export async function chat(user_id, message, opts = {}) {
 	const body = { user_id, message }
 	if (opts.workflow) body.workflow = opts.workflow
 	// 默认流程必须带 request_id；legacy 不需要
 	if (opts.request_id) body.request_id = opts.request_id
 	else if (opts.workflow !== 'legacy') body.request_id = newRequestId()
-	return post('/api/chat', body)
+
+	const startedAt = Date.now()
+	try {
+		const first = await post('/api/chat', body)
+		if (!retryableChatFailure(first) || Date.now() - startedAt > CHAT_RETRY_QUICK_ENOUGH) return first
+		// 后端 200 但操作失败（典型是 AI_CONNECTION_FAILED，retryable=true）：
+		// 换一个新的 request_id 重发一次 —— 失败的那次数据已回滚，重跑不会重复建任务
+		await sleep(CHAT_RETRY_DELAY)
+		return post('/api/chat', Object.assign({}, body, { request_id: newRequestId() }))
+	} catch (error) {
+		// 压根没拿到响应（断网 / 超时 / 5xx）：用同一个 request_id 再问一次，
+		// 服务端若其实已经成功会直接回放缓存结果，不会重复建任务
+		if (!retryableChatTransport(error) || Date.now() - startedAt > CHAT_RETRY_QUICK_ENOUGH) throw error
+		await sleep(CHAT_RETRY_DELAY)
+		return post('/api/chat', body)
+	}
+}
+
+/** 上一次对话请求"失败得够快"才值得自动重试：太慢的话重试只会一起超时 */
+const CHAT_RETRY_QUICK_ENOUGH = 20000
+const CHAT_RETRY_DELAY = 900
+
+/** 后端回了话，但这次操作是失败且可重试的（例如 AI 连接被重置） */
+function retryableChatFailure(view) {
+	const op = view && view.operation
+	return !!(op && op.status === 'failed' && op.error && op.error.retryable)
+}
+
+/** 连响应都没拿到：网络层错误或 5xx */
+function retryableChatTransport(error) {
+	if (!error) return false
+	if (error.kind === 'network' || error.kind === 'timeout') return true
+	return (Number(error.status) || 0) >= 500
+}
+
+function sleep(ms) {
+	return new Promise((resolve) => setTimeout(resolve, ms))
 }
 
 /** 当前状态（不产生副作用，用于冷启动恢复） */
