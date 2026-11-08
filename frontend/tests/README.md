@@ -1,5 +1,15 @@
 # 前端回归
 
+本轮新增 focusResize（真实页面处理函数 + today store，6项）与 receiptMount（首次挂载/草稿/系统信息故障，3项）。与最新主线 PR #29/#30 合并后，下方常规命令共59项通过。
+
+另对官方 uni-app 5.36 生成的 mp-weixin 产物执行4项检查，刻意不提供全局 uni，防止源码模拟掩盖微信编译差异：
+
+```bash
+LIGHTSTEP_MP_BUILD=/absolute/path/to/dist/build/mp-weixin node --test --test-isolation=none frontend/tests/compiledFocusSmoke.cjs
+```
+
+该脚本替换微信/vendor边界，执行实际编译后的 focusFlow、systemInfo、回执与主页代码；不能代替微信平台验收。构建依赖和方式见[本轮修复报告](../../docs/change-reports/2026-11-08-homepage-resize.md)。
+
 ```bash
 node --experimental-vm-modules --test --test-isolation=none frontend/tests/*.test.mjs backend/test_local_journal.cjs
 ```

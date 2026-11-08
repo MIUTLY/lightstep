@@ -1,3 +1,5 @@
+> 2026-11-08 客户端修复：本轮没有新增或修改后端接口。轻/重按钮继续调用 POST /api/today/command，action=resize、direction=smaller/bigger，携带 user_id、request_id、session_id、step_id。必须处理网络失败与 HTTP 200 下 operation.status=failed，成功显示 focus.step；按钮本身不增加完成计步。见[修复报告](change-reports/2026-11-08-homepage-resize.md)。
+
 > 最新流程：完成备忘录一项后自动继续同一清单下一项；最后完成或中途退出成功后回对话页弹出可填写回执，点击保存才写本地手帐。失败不跳页、不假保存。本轮前后端联动规则见[连续专注与回执](focus-chain-receipts.md)。
 
 > 2026-11-08最新：每项任务独立表现计步，按当前执行号选择正常猫和固定票根；前台300秒未操作只换走神图。公共素材改由后端托管，用户文字/合成图仍仅本地；同日手帐多页追加，底图未提供。预约不恢复、轻承诺仍取消。 接口与分工见[最新素材协议](task-presentation-assets.md)。

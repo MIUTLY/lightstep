@@ -17,11 +17,12 @@ import { computed, getCurrentInstance, nextTick, ref, watch } from 'vue'
 import { drawArtReceipt, drawReceipt, exportCanvasTempPath, RECEIPT_W, RECEIPT_H } from '@/utils/receipt.js'
 import { receiptArt, downloadAsset } from '@/utils/presentation.js'
 import { addEntry, persistImage, discardImage } from '@/utils/localJournal.js'
+import { getWindowWidth } from '@/utils/systemInfo.js'
 const props = defineProps({ round: { type: Object, default: null }, flow: { type: Object, required: true } })
 const emit = defineEmits(['closed'])
 const instance = getCurrentInstance()
 const line = ref(''), error = ref(''), saving = ref(false)
-const displayWidth = Math.min(RECEIPT_W, (uni.getSystemInfoSync().windowWidth || 375) * 0.88)
+const displayWidth = Math.min(RECEIPT_W, getWindowWidth() * 0.88)
 const previewBoxStyle = 'position:relative;margin:auto;overflow:hidden;width:' + displayWidth + 'px;height:' + displayWidth * RECEIPT_H / RECEIPT_W + 'px;'
 const canvasStyle = 'position:absolute;left:0;top:0;transform:scale(' + displayWidth / RECEIPT_W + ');transform-origin:top left;width:' + RECEIPT_W + 'px;height:' + RECEIPT_H + 'px;'
 const last = computed(() => props.round?.receipts?.slice(-1)[0] || null)
@@ -53,7 +54,7 @@ function redraw() {
  rendering.catch(e => { if (token === generation) error.value = e.message })
  return rendering
 }
-watch(() => props.round?.id, () => { line.value = props.round?.draft || ''; error.value = ''; redraw() })
+watch(() => props.round?.id, () => { line.value = props.round?.draft || ''; error.value = ''; redraw() }, { immediate: true })
 function onInput(e) {
  if (saving.value) return
  line.value = e.detail.value; error.value = ''
