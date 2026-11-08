@@ -26,23 +26,19 @@ backend/static/ 的浏览器文本手帐是可运行的本地保存示例，不�
 
 ## 源码已就位（2026-11-07）
 
-`frontend/` 已提交 uni-app 微信小程序源码：6 个页面（对话建任务 / 单步执行 / 今日回执 / 静默手帐 / 历史 / 设置）、16 个接口封装、零依赖轻量 store、温和召回与隐形番茄钟、感官友好模式、canvas 回执绘制。
+rontend/ 已提交 uni-app 微信小程序源码：8 个页面（对话 / 单步执行 / 专注模式 / 今日回执 / 静默手帐 / 备忘录 / 历史 / 设置）、/api 接口封装、零依赖轻量 store（session 旧单任务 + 	oday 今日备忘录双流程）、温和召回、感官友好模式、canvas 回执绘制，以及按 Figma 稿还原的专注模式版式。
 
 工程说明、目录结构、启动方式与前后端字段映射见：
 
 - [docs/前端工程说明.md](docs/前端工程说明.md)
 - [docs/字段映射与联调说明.md](docs/字段映射与联调说明.md)
+- [docs/后端v2增量说明.md](docs/后端v2增量说明.md)
 
-**已知遗留（本次未整改）**：手帐页与回执页仍调用已停用的 `/api/journal*`（现返回 410 `JOURNAL_CLIENT_ONLY`），手帐尚未改为客户端本地保存图片与索引 —— 与本文件上方「回执图片和私人留言不上传」的边界冲突，待下一轮修正；`/api/health` 也尚未接入。
+已对齐后端 main 412ebdcb（PR #16）：
 
+- /api/chat 走 chat 路由（闲聊 / 回答待澄清问题 / 新任务），响应含 clarifications 与 can_enter_focus；前端据此决定是否显示「专注模式」入口
+- 手帐改为客户端本地保存（utils/localJournal.js），不再调用 /api/journal*（现返回 410 JOURNAL_CLIENT_ONLY）
+- /api/health 已接入设置页「后端连接」自查
+- 任务计时与预约提醒按后端取消：不再有倒计时、5/10 分钟预约、无操作提醒轮询
 
-
-## 预约提醒行为回归（2026-11-07）
-
-仓库根目录使用 Node 24 运行，无须安装前端构建依赖：
-
-```bash
-node --experimental-vm-modules --test --test-isolation=none frontend/tests/*.test.mjs backend/test_local_journal.cjs
-```
-
-当前共28项（预约新增22项、既有6项）。测试加载实际poller、session、API封装及chat.vue的script，替换Vue/uni平台边界并使用可控计时器、慢请求；覆盖隐藏/卸载、重复onShow、请求不重叠、消费后停表、改约重启、旧响应及错误提示。不执行Vue模板、样式或微信运行时，不能代替HBuilderX编译和真机验收。VM Modules会产生Node实验功能提示。
+**已知遗留**：/api/focus/capture 只支持新增任务，清单项「移除」需后端新增接口；澄清回答依赖模型的意图路由，前端已用「关于「任务名」：」前缀降低误判，根治需后端提供确定性的「回答哪个 item」字段。

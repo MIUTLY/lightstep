@@ -56,22 +56,27 @@
  *
  * 交互约定：
  *  - 回执在前端生成，默认什么都不上传（连那句手写的话也不上传）
- *  - 只有用户主动点「攒进手帐」，才会 POST /api/journal/add 存一条
+ *  - 「攒进手帐」把图片和这句话存到**本地**（utils/localJournal.js），不走后端：
+ *    仓库后端已把 /api/journal* 全部改成 410 JOURNAL_CLIENT_ONLY
  *  - 「存到相册」用 canvas 重画一份同样排版的图再保存
- * 注意：后端在任务完成 / 温柔收尾时也会自动写回执进手帐，所以手帐里本来就会有条目，
- *       这里不重复写入。
  */
 import { computed, getCurrentInstance, ref } from 'vue'
 import { onShow } from '@dcloudio/uni-app'
 
 import ReceiptCard from '@/components/ReceiptCard.vue'
-import { journalAdd } from '@/api/index.js'
 import { useSession } from '@/store/session.js'
 import { useSettings } from '@/store/settings.js'
 import { useUser } from '@/store/user.js'
+import { addEntry, persistImage } from '@/utils/localJournal.js'
 import { catPoseOfSteps, todayCN } from '@/utils/format.js'
 import { getStatusBarHeight } from '@/utils/systemInfo.js'
-import { RECEIPT_H, RECEIPT_W, drawReceipt, saveCanvasToAlbum } from '@/utils/receipt.js'
+import {
+	RECEIPT_H,
+	RECEIPT_W,
+	exportCanvasTempPath,
+	drawReceipt,
+	saveCanvasToAlbum
+} from '@/utils/receipt.js'
 
 const session = useSession()
 const settings = useSettings()
@@ -100,26 +105,31 @@ onShow(async () => {
 	else if (session.task) steps.value = session.task.steps_done || 0
 })
 
+/** 把票根画到离屏 canvas 上（存相册、攒手帐共用同一份绘制） */
+async function renderReceipt() {
+	// 旧版 canvas 的 drawImage 不认包内路径，先解析成真实路径
+	const catPath = await resolveCatImage()
+	await new Promise((resolve) => {
+		const ctx = uni.createCanvasContext('receiptCanvas', instance.proxy)
+		drawReceipt(
+			ctx,
+			{
+				steps: steps.value,
+				line: line.value,
+				date: dateLabel,
+				sensory: settings.sensory,
+				catImagePath: catPath
+			},
+			resolve
+		)
+	})
+}
+
 async function onSave() {
 	if (saving.value) return
 	saving.value = true
 	try {
-		// 旧版 canvas 的 drawImage 不认包内路径，先解析成真实路径
-		const catPath = await resolveCatImage()
-		await new Promise((resolve) => {
-			const ctx = uni.createCanvasContext('receiptCanvas', instance.proxy)
-			drawReceipt(
-				ctx,
-				{
-					steps: steps.value,
-					line: line.value,
-					date: dateLabel,
-					sensory: settings.sensory,
-					catImagePath: catPath
-				},
-				resolve
-			)
-		})
+		await renderReceipt()
 		await saveCanvasToAlbum('receiptCanvas', instance.proxy)
 		uni.showToast({ title: '存进相册了', icon: 'none' })
 	} catch (err) {
@@ -140,13 +150,51 @@ function resolveCatImage() {
 	})
 }
 
-/** 用户主动攒进手帐（这才会上传） */
+/**
+ * 攒进「本地」手帐：把回执图存成本地持久文件 + 写一条索引。
+ * 全程不联网；图片保存失败时降级为只记文字（不阻塞用户）。
+ */
 async function onArchive() {
+	if (saving.value) return
+	saving.value = true
 	try {
-		await journalAdd(user.current(), line.value.trim())
-		uni.showToast({ title: '攒进手帐了', icon: 'none' })
-	} catch (e) {
-		/* request 层已提示 */
+		let imagePath = ''
+		try {
+			await renderReceipt()
+			const tempPath = await exportCanvasTempPath('receiptCanvas', instance.proxy)
+			imagePath = await persistImage(tempPath)
+		} catch (e) {
+			imagePath = ''
+		}
+
+		let stepsNow = steps.value
+		let titles = []
+		try {
+			const summary = await session.fetchTodaySummary()
+			if (summary) {
+				stepsNow = summary.steps_done || stepsNow
+				titles = Array.isArray(summary.titles) ? summary.titles : []
+			}
+		} catch (e) {
+			/* 后端没起来也允许攒手帐 */
+		}
+
+		const record = addEntry({
+			note: line.value.trim(),
+			steps_done: stepsNow,
+			titles,
+			imagePath
+		})
+		if (!record) {
+			uni.showToast({ title: '没存下，再试一次', icon: 'none' })
+			return
+		}
+		uni.showToast({
+			title: imagePath ? '攒进手帐了' : '攒进手帐了（图没存上，只记了文字）',
+			icon: 'none'
+		})
+	} finally {
+		saving.value = false
 	}
 }
 

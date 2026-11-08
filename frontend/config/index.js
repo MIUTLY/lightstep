@@ -13,8 +13,15 @@ export const APP_VERSION = '1.0.0'
 /** 后端地址（不带结尾斜杠） */
 export const DEFAULT_BASE_URL = 'http://127.0.0.1:8000'
 
-/** 请求超时（毫秒）。LLM 真调用时后端最慢 30s，这里留一点余量。 */
-export const REQUEST_TIMEOUT = 35000
+/**
+ * 请求超时（毫秒）。
+ *
+ * 一次 /api/chat 在服务端要串行调用好几次 DeepSeek（路由 → 任务识别 → 复核 → 逐项范围澄清），
+ * 正常 5~10s，但模型端偶发 20~30s 的慢响应，原来的 35s 会抢先超时、
+ * 界面只留下一句「小步想太久了」，看起来就像「没反应」。
+ * 现在后端单次调用超时是 45s（.env 的 LLM_TIMEOUT），前端必须比它更宽 —— 取 60s。
+ */
+export const REQUEST_TIMEOUT = 60000
 
 /** 本地缓存键（统一前缀，便于「清空本地身份」一次清干净） */
 export const STORAGE_KEYS = {

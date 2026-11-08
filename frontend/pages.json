@@ -13,11 +13,17 @@
 			}
 		},
 		{
-			"path": "pages/focus/focus",
+			"path": "pages/focusmode/focusmode",
 			"style": {
 				"navigationStyle": "custom",
 				"disableScroll": true,
-				"navigationBarTitleText": "这一步"
+				"navigationBarTitleText": "专注模式"
+			}
+		},
+		{
+			"path": "pages/memo/memo",
+			"style": {
+				"navigationBarTitleText": "备忘录"
 			}
 		},
 		{

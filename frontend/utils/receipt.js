@@ -211,6 +211,27 @@ export function drawReceipt(ctx, options, done) {
 }
 
 /**
+ * 只把 canvas 导出成**临时文件**，返回临时路径（不进相册）。
+ * 「攒进手帐」需要它：拿到临时路径后用 localJournal.persistImage() 转成持久文件。
+ * @param {string} canvasId 页面里 <canvas canvas-id="..."> 的 id
+ * @param {Object} instance 组件实例（getCurrentInstance().proxy）
+ */
+export function exportCanvasTempPath(canvasId, instance) {
+	return new Promise((resolve, reject) => {
+		uni.canvasToTempFilePath(
+			{
+				canvasId,
+				destWidth: RECEIPT_W,
+				destHeight: RECEIPT_H,
+				success: (res) => resolve(res.tempFilePath),
+				fail: (err) => reject(new Error((err && err.errMsg) || '导出图片失败'))
+			},
+			instance
+		)
+	})
+}
+
+/**
  * 把画好的 canvas 存进相册（含授权被拒的引导）。
  * @param {string} canvasId 页面里 <canvas canvas-id="..."> 的 id
  * @param {Object} instance 组件实例（getCurrentInstance().proxy）

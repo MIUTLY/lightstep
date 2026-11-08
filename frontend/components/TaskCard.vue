@@ -6,7 +6,7 @@
 		</view>
 
 		<view v-if="task.current_step" class="task-step">
-			<text class="step-label">这一步 </text>
+			<text class="step-label">这一步</text>
 			<text class="step-text">{{ task.current_step }}</text>
 		</view>
 
@@ -79,13 +79,20 @@ defineProps({
 }
 
 .step-label {
+	display: block;
 	font-size: 24rpx;
 	color: var(--muted);
 }
 
+/* 后端 2026-11-08 起，父任务的 current_step 会把动作明细并进同一字段，
+   用换行分隔（「洗衣服\n放入衣物；加洗衣液」）。
+   这里必须保留换行，否则明细会被压成一行、看起来像一句错话。 */
 .step-text {
+	display: block;
+	margin-top: 2rpx;
 	font-size: 30rpx;
 	color: var(--ink);
+	white-space: pre-wrap;
 }
 
 .task-meta {

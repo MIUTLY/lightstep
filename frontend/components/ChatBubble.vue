@@ -10,8 +10,11 @@
 			<text>{{ message.text }}</text>
 		</view>
 
-		<!-- 小步说的话 -->
-		<view v-else class="bubble bubble-cat">
+		<!-- 小步说的话：完整原图头像（不裁切）放在气泡左侧 -->
+		<view v-else class="cat-pair">
+			<!-- 完整头像：不做圆形裁切、不缩放裁切，按原比例整只放下（含底下那朵云） -->
+			<image class="cat-avatar" src="/static/xiaobu.png" mode="widthFix" />
+			<view class="bubble bubble-cat">
 			<text v-if="reply" class="bubble-text reply-text">{{ reply }}</text>
 
 			<TaskCard v-if="task" :task="task" />
@@ -25,6 +28,7 @@
 			</view>
 
 			<ActionBar v-if="buttons.length" :buttons="buttons" @tap="onLabel" />
+		</view>
 		</view>
 	</view>
 </template>
@@ -93,6 +97,26 @@ function onLabel(label) {
 	justify-content: center;
 }
 
+/* 小步的消息：完整头像在左、气泡在右。
+   头像不做任何裁切（不用 border-radius / overflow:hidden，也不用 aspectFill），
+   直接按原图比例整只显示 —— 素材本身就是"瘫在云上的黑猫"，裁掉云会显得断头断脚。 */
+.cat-pair {
+	display: flex;
+	flex-direction: row;
+	align-items: flex-start;
+	max-width: 96%;
+}
+
+.cat-avatar {
+	flex: none;
+	/* 完整原图：400×238 的宽幅，宽度定死、高度由 mode="widthFix" 自动。
+	   尺寸在 132rpx 的基础上缩到 0.8 倍 → 106rpx（约 105.6rpx）。 */
+	width: 106rpx;
+	height: auto;
+	margin-right: 14rpx;
+	margin-top: 4rpx;
+}
+
 .bubble {
 	max-width: 84%;
 	padding: 20rpx 24rpx;
@@ -108,6 +132,7 @@ function onLabel(label) {
 }
 
 .bubble-cat {
+	max-width: 100%;
 	background-color: var(--surface);
 	border: 1rpx solid var(--line);
 	border-bottom-left-radius: 8rpx;
