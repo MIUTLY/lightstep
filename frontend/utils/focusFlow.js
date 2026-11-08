@@ -2,15 +2,27 @@
  * Backend receipt facts are saved before acknowledgement; personal drafts never go to the API.
  */
 import { newRequestId } from './requestId.js'
-export function createFocusFlow({ today, userId, storage = uni }) {
+// 注意：默认参数里**不能**直接引用那个全局对象（写出来就是裸标识符）。
+// uni-app 的 mp-weixin 编译器只会把 `uni.xxx` 这种成员访问改写成 common_vendor.index，
+// 裸标识符会原样留下，运行时报 ReferenceError: uni is not defined
+//（2026-11-08 13:34 实测：chat 页直接白屏 + Component is missing template）。
+// 所以这里延迟到调用时才取成员方法。
+function uniStorage() {
+ return {
+  getStorageSync: (key) => uni.getStorageSync(key),
+  setStorageSync: (key, value) => uni.setStorageSync(key, value)
+ }
+}
+export function createFocusFlow({ today, userId, storage }) {
+ const box = storage || uniStorage()
  const key = () => 'lightstep_focus_rounds_' + userId()
  function read() {
-  const raw = storage.getStorageSync(key())
+  const raw = box.getStorageSync(key())
   const value = raw ? (typeof raw === 'string' ? JSON.parse(raw) : raw) : { rounds: [], current: null }
   if (!value || !Array.isArray(value.rounds)) throw new Error('回执记录暂时无法读取，请保留当前页面')
   return value
  }
- function write(value) { storage.setStorageSync(key(), JSON.stringify(value)) }
+ function write(value) { box.setStorageSync(key(), JSON.stringify(value)) }
  function begin() {
   const box = read()
   if (!box.current) {
