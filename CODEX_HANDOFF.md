@@ -1,3 +1,5 @@
+> 最新修复：独立备忘录任务自动连续，最后完成/成功中断后回对话弹可填写回执，用户主动保存才写本地手帐。用户本轮授权前端修改；分支fix/focus-chain-and-receipts，实施e094e6495750cc6de338f51dc3a4ae7811db7d0a。190项后端、47项Node、隔离冒烟和三个SFC通用编译检查通过，微信真机/HBuilderX未验收；未合并/部署。根因、接口、文件、旧测试替代及限制见[focus-chain-receipts](docs/focus-chain-receipts.md)和[handoff](docs/handoff.md)。
+
 > 2026-11-08最新：feat/task-presentation-assets基于主线332e192，实施3db389dbd2ab764d4b05b9e8ddc76a662eb70b03。每项独立表现计步、确定性猫/票根、后端30张运行图和状态原包托管/保留、前台300秒仅换走神图协议；186项回归及隔离冒烟通过。队友现有前端/JSON兼容补丁保持，前端新策略与微信验收仍待接入。原票根大包上传中断，未入仓，在/workspace/deliverables/lightstep-original-receipts.zip保留；线上运行不依赖它。底图未提供，不造替代。接口与限制见[task-presentation-assets.md](docs/task-presentation-assets.md)及[handoff](docs/handoff.md)。本轮未合并/部署。
 
 > PR #17追加产品语义修正：AI只拆可执行行动、记录用户自报进度，不检查答案/正确率，不强加理由、留证、自评或质量验收。共享政策用于生成、审核和范围澄清，已有完成接口不评分；用户原目标必要的检查/论证/交付仍保留。实施e9f6fd5a52042bc2ab986a99ef36dc9efdbf8db2，164项回归及4项专项、隔离冒烟通过。新规则用于新生成，不重拆旧森林丢进度；真实AI样例与微信端未验收。详见[action-support](docs/action-support.md)和[handoff](docs/handoff.md)。未合并/部署。

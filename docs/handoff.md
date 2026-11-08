@@ -1,3 +1,69 @@
+# 最新交接：连续执行备忘录任务，结束后回对话并填写回执
+
+2026-11-08，分支fix/focus-chain-and-receipts，基于最新main e235eedefcfa2ed229356ec7320217b02f0ed0e8。实施[e094e6495750cc6de338f51dc3a4ae7811db7d0a](https://github.com/MIUTLY/lightstep/commit/e094e6495750cc6de338f51dc3a4ae7811db7d0a)。本轮未合并或部署。
+
+## 用户确认与核实
+
+用户确认“大任务”为备忘录中的独立项，做完一项自动执行下一项；本轮允许直接修复相关前端，覆盖此前只改后端的本轮范围限制。最后一项完成或点击“就到这里吧”成功退出后，应返回对话页弹本轮回执；用户填写并主动保存后才写手帐。
+
+核实根因：focusmode.onDone只complete并ack事件，没有select下一项，因此整项完成后focus=null、操作按钮失效；onExit在finally无条件返回备忘录，未确认end成功就绘图/自动写空白手帐；handleEvents预先ack回执使可填写事实丢失。today.apply还会把专注新增任务的紧凑capture响应当完整清单，短暂清空focus/items。网络重试生成新ID可能重复写操作或使丢响应后无法恢复。
+
+## 实际改动与理由
+
+- 新增utils/focusFlow.js：复用已有complete→select，不改后台森林算法。A完成先提交，再选同日期清单首个未完成B；新B用自己的首节点/步号，已有B保留原进度。B失败提供重试，不回滚A、不重做A；需澄清回对话页，跨日期不自动开另一日任务。内部防连点。
+- 同一连续轮次本地outbox按user_id持久记录各项后端receipt事实，中间不弹窗；最终完成/明确退出后ready。退出时该轮标中断，不因上一项刚完成就声称整轮完成。票根仍取最后实际专注任务的服务端presentation，不跨任务累计步数。
+- focusmode去掉自动存手帐/无条件返回备忘录，成功后reLaunch到chat；失败保留当前任务，下一项失败显示重试。移除旧文字召回，保留既有前台未操作仅换猫的规则；后台到达成功响应等待恢复处理。
+- today.js持久化complete/end/select操作ID，同一请求丢响应重试同ID，新步骤/新选择新ID；紧凑capture不清空清单和focus；ack失败不标本地成功。保留revision守卫及队友接口/页面和模型兼容工作。
+- chat恢复后先保存回执事实，再ack服务端receipt；在对话页显示新增FocusReceiptDialog，隐藏页不弹。可收起保留草稿，之后回对话可再看；新的本轮回执优先于旧的暂存回执。
+- 弹窗可填写横线输入区，文字实时合成到票根下半区域；保存复用同一Canvas，实际日期替换原图日期。修正原日期补丁按画布坐标截原图的问题，按实际运行图尺寸取样；原图绘制失败或日期不能覆盖时报错，不假保存。
+- localJournal按稳定轮次页ID防重复，同日不同轮次追加；取消500页静默截断，坏索引不覆盖，图片或索引失败保留文字/不提示成功，清理失败保存产生的未引用图片。旧中性票根不再截前18字；无法容纳时要求缩短，不静默裁剪。
+
+后端生产代码及API参数未修改。新增3项真实TestClient HTTP契约验证A→B→C节点/独立计步、全部完成回执、退出保进度/防重、B生成失败保留A；调整旧AI生成测试的替身以适配主线已存在的生成/审核重试，不改模型重试实现。
+
+## 修改文件
+
+frontend/utils/focusFlow.js、store/today.js、pages/focusmode/focusmode.vue、pages/chat/chat.vue、components/FocusReceiptDialog.vue、utils/localJournal.js、utils/presentation.js、utils/receipt.js。新增6组当前流程测试并更新测试加载器；后端新增test_focus_chain_contract.py、适配test_ai_generation.py。README（根/前后端）、需求、API、today-memo、AGENTS及新增[focus-chain-receipts.md](focus-chain-receipts.md)同步更新。源素材、队友后端兼容补丁和其他页面保留。
+
+## 测试命令与结果
+
+标准命令：
+```bash
+# 仓库根目录
+node --experimental-vm-modules --test --test-isolation=none frontend/tests/*.test.mjs backend/test_local_journal.cjs
+# backend目录
+python -m unittest discover -s . -p 'test_*.py'
+python smoke_test.py
+```
+云环境实际后端命令沿用仓库外selector辅助：
+```bash
+PYTHONDONTWRITEBYTECODE=1 PYTHONPATH=/workspace/work/pr8-runtime:/workspace/work:backend timeout 90s python -m unittest discover -s backend -p 'test_*.py'
+PYTHONDONTWRITEBYTECODE=1 PYTHONPATH=/workspace/work/pr8-runtime:/workspace/work:backend timeout 30s python backend/smoke_test.py
+git diff --check
+```
+**190项后端测试全部通过，51.808s**（主线187+新增3）；**47项Node测试全部通过，220.512ms**（新流程35+原兼容单元9+本地文本手帐3），隔离SQLite冒烟、Python AST、前端JSON和diff检查通过。
+
+在仓库外临时安装@vue/compiler-sfc@3.4.38（--ignore-scripts，未改项目依赖），对修改的chat、focusmode、FocusReceiptDialog完成parse/compileScript/compileTemplate/compileStyle检查，全部通过。这不是HBuilderX/微信编译。
+
+新增Node覆盖：A到B首步骤、最后完成回对话/排队回执、退出失败留页、下一项失败不重做A及退出、同日期边界、连点、前后台、不同用户、重复响应/旧回执优先级、草稿重开、完整文字预览/保存、图片/索引/下载失败、同日多页、超过500页不删旧记录、损坏索引保护、丢响应ID复用、capture不清focus、ack失败、实际图片坐标日期覆盖、过长文字拒绝和底图绘制失败。
+
+### 原测试失配的处理
+
+先用未改动的main e235eedef快照运行原25项Node测试：9通过、16失败。失败来自已取消预约的startReminderChecks接口不存在及旧chat页面的过期mock。移除chatReminderLifecycle/startReminderSession两份旧预约测试，用新chatFocusReceiptLifecycle和focusStore当前业务测试替代；保留startReminderPoller纯兼容6项和stepIdentity3项。说明写入frontend/tests/README.md，不恢复已取消产品来迎合旧测试。
+
+后端初测4个错误来自主线新增三轮生成/审核重试，旧替身只供应一轮响应，耗尽后StopIteration。让非法/拒绝替身持续返回，并mock测试中的真实退避sleep，仍断言最终拒绝且不创建任务；生产逻辑未改。
+
+## 未验证和交接
+
+- 尚未执行微信真机/HBuilderX完整编译。需要实测A→B界面刷新、最后完成/退出跳转、弹窗层级与原生Canvas/textarea、600×900预览缩放、填写/保存一致、图片下载与日期覆盖、相册/文件权限、空间不足、重开与同日翻页、前后台及断网重试。
+- 回执用户文字、图片、轮次草稿仅客户端保存，不上传、不评分；手帐新大底图仍缺，不自行绘制替代，本轮先保存完整回执页并复用现有日期轴/翻页查看。
+- 自动连续仅限所选日期清单，B需AI准备失败不阻塞A已完成事实；用户可以重试或结束本轮。完整任务范围仍以服务端叶子为准，不以表现计步判完成。
+- 原素材包/计数历史缺失的兼容限制继续按此前交接，本轮不修改素材或推测历史。
+- 本轮用户授权相关前端联动，不等于已替队友完成全部UI验收；新PR待检查，不自动合并或部署。
+
+---
+
+以下为历史交接。
+
 # 最新交接：独立表现计步、后端公共素材与前台未操作形象协议
 
 2026-11-08。分支feat/task-presentation-assets，基于最新main 332e192aac3bc5fbed2e0e535fa0f3f8c00baede。实施[3db389dbd2ab764d4b05b9e8ddc76a662eb70b03](https://github.com/MIUTLY/lightstep/commit/3db389dbd2ab764d4b05b9e8ddc76a662eb70b03)。本轮未合并/部署。
