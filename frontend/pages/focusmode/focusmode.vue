@@ -51,10 +51,11 @@
 			<image class="note-img" src="/static/focus-book-1.png" mode="aspectFill" />
 		</view>
 
-		<!-- 右下角：地板上的小猫。设计稿里它是纯静态装饰，不是按钮，
-		     所以这里不加 hover-class、不绑 tap，只按设计稿的坐标和尺寸摆好。 -->
-		<view class="floor-cat">
-			<image class="floor-cat-img" src="/static/focus-book-2.png" mode="aspectFill" />
+		<!-- 右下角桌宠：2026-11-08 起素材由后端托管，按「表现计步」切状态图。
+		     单击不做任何事；双击打开新增任务弹窗（原「小布聊天」）；
+		     前台 300 秒没操作只换成走神图，不改任何服务器状态。 -->
+		<view class="floor-cat" @touchstart="onUserTouch" @tap="onPetTap">
+			<image class="floor-cat-img" :src="petSrc" mode="aspectFit" @error="onPetError" />
 		</view>
 
 		<!-- 底部：就到这儿吧（设计稿距画布底边 152px ≈ 148rpx） -->
@@ -169,7 +170,16 @@ import { useToday } from '@/store/today.js'
 import { useSoftRecall } from '@/composables/useSoftRecall.js'
 import { addEntry, persistImage } from '@/utils/localJournal.js'
 import { todayCN } from '@/utils/format.js'
-import { RECEIPT_H, RECEIPT_W, drawReceipt, exportCanvasTempPath } from '@/utils/receipt.js'
+import { RECEIPT_H, RECEIPT_W, drawArtReceipt, drawReceipt, exportCanvasTempPath } from '@/utils/receipt.js'
+import {
+	downloadAsset,
+	idlePetUrl,
+	idleTimeoutSeconds,
+	lastReceiptEvent,
+	loadManifest,
+	petImageUrl,
+	receiptArt
+} from '@/utils/presentation.js'
 import { getStatusBarHeight } from '@/utils/systemInfo.js'
 
 const settings = useSettings()
@@ -212,11 +222,77 @@ const currentStep = computed(() => {
 
 const doneCount = computed(() => today.completedActions().length)
 
+/* ---------------- 桌宠：后端托管素材 + 表现计步 + 空闲换走神图 ---------------- */
+
+/** 素材清单（/api/assets/manifest，进程内缓存）；拿不到就只用本地兜底图 */
+const manifest = ref(null)
+/** 是否处于「前台 300 秒没操作」状态：只影响显示哪张图 */
+const idleNow = ref(false)
+/** 网络素材加载失败 → 回落设计稿那张地板猫 */
+const petBroken = ref(false)
+let idleTimer = null
+
+/** 后端下发的当前桌宠（focus.presentation.normal_pet） */
+const normalPetSrc = computed(() => petImageUrl(today.focusPresentation()))
+
+/** 走神图（manifest.idle_policy.idle_pet → pets.distracted） */
+const idlePetSrc = computed(() => idlePetUrl(manifest.value))
+
+const petSrc = computed(() => {
+	if (petBroken.value) return '/static/focus-book-2.png'
+	if (idleNow.value && idlePetSrc.value) return idlePetSrc.value
+	return normalPetSrc.value || '/static/focus-book-2.png'
+})
+
+const idleSeconds = computed(() => idleTimeoutSeconds(today.policy(), manifest.value))
+
+function clearIdleTimer() {
+	if (idleTimer) {
+		clearTimeout(idleTimer)
+		idleTimer = null
+	}
+}
+
+function scheduleIdleTimer() {
+	clearIdleTimer()
+	if (!today.hasFocus()) return
+	idleTimer = setTimeout(() => {
+		idleNow.value = true
+		idleTimer = null
+	}, idleSeconds.value * 1000)
+}
+
+/** 任何触摸 / 输入都算「人还在」：恢复正常猫并重新计时 */
+function noteActivity() {
+	if (idleNow.value) idleNow.value = false
+	scheduleIdleTimer()
+}
+
+function onPetError() {
+	petBroken.value = true
+}
+
+/** 单击无动作；300ms 内连点两下 = 打开新增任务弹窗 */
+let lastPetTapAt = 0
+function onPetTap() {
+	noteActivity()
+	const now = Date.now()
+	if (now - lastPetTapAt < 300) {
+		lastPetTapAt = 0
+		toggleChat()
+		return
+	}
+	lastPetTapAt = now
+}
+
 /* ---------------- 进页面自动开一项 ---------------- */
 
 onShow(async () => {
 	settings.load()
 	resumeRecall()
+	loadManifest().then((m) => {
+		if (m) manifest.value = m
+	})
 	if (!today.loaded) await today.load()
 	if (today.hasFocus() || today.pendingSelect) return
 	// 还有没澄清完的任务时不要抢着开专注（后端 can_enter_focus=false）
@@ -233,10 +309,14 @@ onShow(async () => {
 	} else if (status === 'failed') {
 		uni.showToast({ title: (view.operation.error && view.operation.error.message) || '没能开始', icon: 'none' })
 	}
+	scheduleIdleTimer()
 })
 
 onHide(() => {
 	stopRecall()
+	// 退到后台就取消计时（协议：on_background=cancel），回来重新等满 300 秒
+	clearIdleTimer()
+	idleNow.value = false
 })
 
 /* ---------------- 喇叭（设计稿里左上角那个图标） ---------------- */
@@ -250,6 +330,7 @@ function onSound() {
 
 async function onDone() {
 	if (today.busy || !hasFocus.value) return
+	noteActivity()
 	const stepId = today.focus && today.focus.step && today.focus.step.step_id
 	await today.complete(stepId)
 	await handleEvents()
@@ -258,11 +339,13 @@ async function onDone() {
 
 async function onLighter() {
 	if (today.busy || !hasFocus.value) return
+	noteActivity()
 	await today.resize('smaller')
 }
 
 async function onHeavier() {
 	if (today.busy || !hasFocus.value) return
+	noteActivity()
 	await today.resize('bigger')
 }
 
@@ -275,31 +358,94 @@ async function onExit() {
 	exiting.value = true
 	const steps = doneCount.value
 	const title = today.focus ? today.focus.title : ''
+	noteActivity()
 
 	try {
+		// 收尾前先记下「该印哪张票根、印哪天」：receipt 事件里有 presentation 与 occurred_date
+		let receiptEvent = null
 		if (today.hasFocus()) {
 			await today.end()
+			receiptEvent = lastReceiptEvent(today.events)
 			await handleEvents()
 		}
 
 		let imagePath = ''
 		try {
-			await renderReceipt(title, steps)
+			await renderReceipt(title, steps, receiptEvent)
 			const tempPath = await exportCanvasTempPath('focusReceipt', instance.proxy)
 			imagePath = await persistImage(tempPath)
 		} catch (e) {
 			imagePath = ''
 		}
 
-		addEntry({ note: '', steps_done: steps, titles: title ? [title] : [], imagePath })
-		uni.showToast({ title: imagePath ? '存进手账了' : '记下了（图没存上）', icon: 'none' })
+		const saved = addEntry({
+			note: '',
+			steps_done: steps,
+			titles: title ? [title] : [],
+			imagePath,
+			// 手账归档按实际结束日（跨天退出时不能算成今天的页）
+			occurred_date: (receiptEvent && receiptEvent.occurred_date) || ''
+		})
+		if (!saved) {
+			// 本地存储写失败：如实说没存上，不能假装成功
+			uni.showToast({ title: '这次没存进手账（本地存储写入失败）', icon: 'none' })
+		} else if (!imagePath) {
+			uni.showToast({ title: '记下了（回执图没存上）', icon: 'none' })
+		} else {
+			uni.showToast({ title: '存进手账了', icon: 'none' })
+		}
 	} finally {
 		exiting.value = false
 		backToMemo()
 	}
 }
 
-function renderReceipt(title, steps) {
+/** 后端票根素材是否可用（available + 有 url） */
+function artOfReceiptEvent(receiptEvent) {
+	if (!receiptEvent) return null
+	const art = receiptArt(receiptEvent.presentation)
+	return art && art.id ? art : null
+}
+
+/**
+ * 画这次的回执：
+ *   - 有后端票根素材 → 用素材合成（底图 + 覆盖旧日期 + 真实日期 + 用户文字）
+ *   - 没素材 / 下载失败 → 回落到原来那张整张自绘票根，不能因为图挂了就不存
+ */
+function renderReceipt(title, steps, receiptEvent) {
+	const art = artOfReceiptEvent(receiptEvent)
+	if (art) {
+		return downloadAsset(art.url).then((localPath) => {
+			if (!localPath) return renderLocalReceipt(title, steps)
+			return new Promise((resolve) => {
+				nextTick(() => {
+					const ctx = uni.createCanvasContext('focusReceipt', instance.proxy)
+					drawArtReceipt(
+						ctx,
+						{
+							imagePath: localPath,
+							composition: art.composition,
+							dateText: formatOccurred(receiptEvent.occurred_date),
+							line: title ? '这次做到「' + title + '」' : '这次就到这儿。',
+							sensory: settings.sensory
+						},
+						resolve
+					)
+				})
+			})
+		})
+	}
+	return renderLocalReceipt(title, steps)
+}
+
+/** '2026-11-08' → '2026.11.08'（票根右下角印法） */
+function formatOccurred(dateStr) {
+	const raw = String(dateStr || '').trim()
+	if (/^\d{4}-\d{2}-\d{2}$/.test(raw)) return raw.replace(/-/g, '.')
+	return todayCN()
+}
+
+function renderLocalReceipt(title, steps) {
 	return new Promise((resolve, reject) => {
 		uni.getImageInfo({
 			src: '/static/xiaobu.png',
@@ -489,6 +635,8 @@ const {
 
 function onUserTouch() {
 	pokeRecall()
+	// 触摸也算「人还在」：走神图恢复正常猫，空闲计时重新开始
+	noteActivity()
 }
 
 function backToMemo() {
@@ -770,6 +918,7 @@ function backToMemo() {
 
 /* 地板上的小猫：设计稿 404×375 @ (364, 813) → 394×366，右边缘贴齐画布（right: 0），
    距画布底边 188px → 184rpx。设计稿里它是静态装饰，所以这里没有任何点击态/悬停态 */
+/* 地板猫 / 桌宠：固定容器 + aspectFit，换状态图时容器尺寸不变，点击区域不跳 */
 .floor-cat {
 	position: absolute;
 	right: 0;

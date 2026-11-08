@@ -1,7 +1,13 @@
 <template>
-	<view class="page" :class="themeClass">
-		<!-- 左侧抽屉（fixed，默认隐藏，DOM 位置不影响布局） -->
-		<SideDrawer current="journal" />
+	<view
+		class="page"
+		:class="themeClass"
+		@touchstart="onEdgeSwipeStart"
+		@touchend="onEdgeSwipeEnd"
+	>
+		<!-- 左侧抽屉：手账页**不放可见的侧边栏按钮**（用户要求去掉），
+		     改成「从左缘往右滑」唤出，页面仍然能切走 -->
+		<SideDrawer ref="drawer" current="journal" :edge-handle="false" />
 
 		<!-- 顶部一句很轻的说明，不做统计、不做连续天数 -->
 		<view class="head">
@@ -73,13 +79,32 @@
 					<!-- 翻页时扫过纸面的暗部 -->
 					<view class="turn-shade"></view>
 				</view>
+
+				<!-- 翻页箭头：放在 .book 里（= 纸面范围），所以 50% 就是纸面的正中，
+				     不会再被下面的页脚条把手柄拉到偏下 -->
+				<view
+					class="page-arrow page-arrow-l"
+					:class="{ disabled: !canGoBack }"
+					hover-class="page-arrow-hover"
+					:hover-stay-time="60"
+					@tap.stop="prevPage"
+				>
+					<text class="arrow-icon">‹</text>
+				</view>
+				<view
+					class="page-arrow page-arrow-r"
+					:class="{ disabled: !canGoNext }"
+					hover-class="page-arrow-hover"
+					:hover-stay-time="60"
+					@tap.stop="nextPage"
+				>
+					<text class="arrow-icon">›</text>
+				</view>
 			</view>
 
-			<!-- 书下方：上一页 / 页码 / 删除这一页 -->
+			<!-- 书下方：页码 / 删除这一页 -->
 			<view class="book-foot">
-				<view class="foot-slot foot-left">
-					<text v-if="canGoBack" class="foot-link" @tap.stop="prevPage">‹ 上一页</text>
-				</view>
+				<view class="foot-slot foot-left"></view>
 				<text class="foot-mid">{{ pageLabel }}</text>
 				<view class="foot-slot foot-right">
 					<text v-if="currentReceipt" class="foot-link" @tap.stop="onDelete">删除这页</text>
@@ -97,7 +122,9 @@
  *   ① 顶部日期轴：可横滑，最右边永远是今天；点哪天，下面翻到哪天。
  *   ② 半本书：只画打开的书**右半页**，左半页裁在屏幕外；纸面有书脊阴影和层叠边缘。
  *   ③ 回执贴图：用 aspectFit 放在纸面内的照片框里，永远不超出纸页。
- *   ④ 翻页：点纸面 → 当前页从右向左翻走，露出下一张；范围只在本日期自己的回执里。
+ *   ④ 翻页：书**左右两边各一个小箭头**（左=上一页，右=下一页，到头变淡）；
+ *      点纸面也等于「下一页」；翻页范围只在本日期自己的回执里。
+ *      手账页不放可见的侧边栏按钮，改成从左缘右滑唤出抽屉。
  *
  * ⚠️ 数据全部在本地（uni storage），一条都不上传：
  *   仓库后端已把 /api/journal* 全部改成 410 detail.code=JOURNAL_CLIENT_ONLY，
@@ -160,11 +187,12 @@ const entries = ref([])
 
 const todayKey = ref(todayStr())
 
-/** 按日期分组；同一天按创建时间正序（翻页 = 从早到晚） */
+/** 按日期分组；同一天按创建时间正序（翻页 = 从早到晚）
+ *  2026-11-08 起优先用 occurred_date（实际结束日），跨天退出不会被算到前一天。 */
 const byDate = computed(() => {
 	const map = {}
 	entries.value.forEach((entry) => {
-		const day = entry && entry.date ? String(entry.date) : ''
+		const day = entry && (entry.occurred_date || entry.date) ? String(entry.occurred_date || entry.date) : ''
 		if (!day) return
 		if (!map[day]) map[day] = []
 		map[day].push(entry)
@@ -217,6 +245,8 @@ const currentReceipt = computed(() => dayReceipts.value[pageIndex.value] || null
 const nextReceipt = computed(() => dayReceipts.value[pageIndex.value + 1] || null)
 
 const canGoBack = computed(() => pageIndex.value > 0)
+/** 右边箭头：本日期还有下一张、且不在翻页动画里 */
+const canGoNext = computed(() => !flipping.value && !!nextReceipt.value)
 
 const isToday = computed(() => selectedDate.value === todayKey.value)
 
@@ -258,7 +288,8 @@ const TURN_MS = 420
 const flipping = ref(false)
 let flipTimer = null
 
-function onTapPaper() {
+/** 下一页（右侧箭头 / 点纸面都走它） */
+function nextPage() {
 	if (flipping.value) return
 	if (!dayReceipts.value.length) {
 		uni.showToast({ title: emptyTitle.value, icon: 'none' })
@@ -276,9 +307,50 @@ function onTapPaper() {
 	}, TURN_MS)
 }
 
+/** 点纸面 = 看下一页（和右侧箭头等价，保留原有手势习惯） */
+function onTapPaper() {
+	nextPage()
+}
+
 function prevPage() {
 	if (flipping.value || pageIndex.value <= 0) return
 	pageIndex.value -= 1
+}
+
+/* ---------------- 侧边栏：手账页没有可见按钮，靠左缘右滑唤出 ---------------- */
+
+const drawer = ref(null)
+const EDGE_ZONE_PX = 44
+const EDGE_SWIPE_PX = 60
+let edgeStartX = 0
+let edgeStartY = 0
+let edgeTracking = false
+
+function touchPoint(e) {
+	const list = (e && e.changedTouches && e.changedTouches.length && e.changedTouches) ||
+		(e && e.touches) || []
+	return (list && list[0]) || null
+}
+
+function onEdgeSwipeStart(e) {
+	const t = touchPoint(e)
+	if (!t) return
+	const x = Number(t.clientX !== undefined ? t.clientX : t.pageX) || 0
+	edgeTracking = x <= EDGE_ZONE_PX
+	edgeStartX = x
+	edgeStartY = Number(t.clientY !== undefined ? t.clientY : t.pageY) || 0
+}
+
+function onEdgeSwipeEnd(e) {
+	if (!edgeTracking) return
+	edgeTracking = false
+	const t = touchPoint(e)
+	if (!t) return
+	const x = Number(t.clientX !== undefined ? t.clientX : t.pageX) || 0
+	const y = Number(t.clientY !== undefined ? t.clientY : t.pageY) || 0
+	if (x - edgeStartX >= EDGE_SWIPE_PX && Math.abs(y - edgeStartY) < 60) {
+		if (drawer.value && drawer.value.open) drawer.value.open()
+	}
 }
 
 function previewImage(path) {
@@ -619,6 +691,55 @@ function onDelete() {
 
 .theme-sensory .paper-current.flipping .turn-shade {
 	animation: none;
+}
+
+/* ---------- 书左右两边的翻页箭头 ---------- */
+
+.page-arrow {
+	position: absolute;
+	/* 现在挂在 .book 里，50% = 纸面正中；往上抬一点，落在回执图那一带而不是纸的中下部 */
+	top: 44%;
+	margin-top: -32rpx;
+	z-index: 4;
+	width: 64rpx;
+	height: 64rpx;
+	display: flex;
+	align-items: center;
+	justify-content: center;
+	border-radius: 50%;
+	background-color: rgba(255, 255, 255, 0.86);
+	border: 1rpx solid var(--line);
+	box-shadow: 0 6rpx 16rpx rgba(96, 76, 48, 0.18);
+}
+
+/* .book 的左缘在屏幕外 18rpx、右缘离屏幕 26rpx，这里补回来，保持视觉上仍贴两侧 */
+.page-arrow-l {
+	left: 26rpx;
+}
+
+.page-arrow-r {
+	right: 18rpx;
+}
+
+.page-arrow-hover {
+	background-color: #ffffff;
+}
+
+/* 到头了：箭头变淡且点了没反应（比弹 toast 更清楚） */
+.page-arrow.disabled {
+	opacity: 0.28;
+}
+
+.arrow-icon {
+	font-size: 34rpx;
+	line-height: 1;
+	color: var(--ink-soft);
+}
+
+/* 感官友好模式：去掉投影，保持平实 */
+.theme-sensory .page-arrow {
+	background-color: #fafafa;
+	box-shadow: none;
 }
 
 /* ---------- 书下方的操作条 ---------- */

@@ -210,6 +210,127 @@ export function drawReceipt(ctx, options, done) {
 	})
 }
 
+/* ================= 后端票根素材（2026-11-08 起） ================= */
+
+/**
+ * 把后端下发的票根素材画到 canvas（预览与导出共用这一套合成）。
+ *
+ * 依据 docs/task-presentation-assets.md：
+ *   - 底图是后端托管的票根（1696×2528 设计坐标系），**上面已经印死了旧日期**，
+ *     必须先用同一张图的空白区域（date_patch_source）盖住旧日期（date_cover），
+ *     再把真实日期写进 date_text_box —— 不能在旧日期旁边另写一份。
+ *   - 用户文字写进 text_box：先换行，超出就缩字号；**不截断、不用省略号**伪造成完整保存。
+ *   - 没有素材（available=false / 下载失败）时由调用方回落到旧的整张自绘票根。
+ *
+ * @param {Object} ctx  uni.createCanvasContext 的上下文
+ * @param {Object} options
+ * @param {string} options.imagePath     票根底图的**本地路径**（页面负责下载）
+ * @param {Object} options.composition   素材里的 composition 对象
+ * @param {string} [options.dateText]    真实日期，如 2026.11.08（用 occurred_date 格式化）
+ * @param {string} [options.line]        用户写的那句话
+ * @param {boolean} [options.sensory]    感官友好模式（只影响兜底底色）
+ * @param {Function} [done]
+ */
+export function drawArtReceipt(ctx, options, done) {
+	const opts = options || {}
+	const comp = opts.composition || {}
+	const space = Array.isArray(comp.coordinate_space) ? comp.coordinate_space : [1696, 2528]
+	const sx = RECEIPT_W / (Number(space[0]) || 1696)
+	const sy = RECEIPT_H / (Number(space[1]) || 2528)
+	const box = (b) => ({
+		x: (b && Number(b.x)) || 0,
+		y: (b && Number(b.y)) || 0,
+		w: (b && Number(b.width)) || 0,
+		h: (b && Number(b.height)) || 0
+	})
+
+	// 底色（图没铺满时也不露白）
+	ctx.setFillStyle('#f5f0e8')
+	ctx.fillRect(0, 0, RECEIPT_W, RECEIPT_H)
+
+	// 1. 票根底图
+	try {
+		ctx.drawImage(opts.imagePath, 0, 0, RECEIPT_W, RECEIPT_H)
+	} catch (e) {
+		/* 交给调用方回落 */
+	}
+
+	// 2. 盖掉印死的旧日期，再写真实日期
+	const cover = box(comp.date_cover)
+	const patch = box(comp.date_patch_source)
+	const dateBox = box(comp.date_text_box)
+	if (cover.w && cover.h && patch.w && patch.h) {
+		try {
+			ctx.drawImage(
+				opts.imagePath,
+				patch.x * sx, patch.y * sy, patch.w * sx, patch.h * sy,
+				cover.x * sx, cover.y * sy, cover.w * sx, cover.h * sy
+			)
+		} catch (e) {
+			/* 旧 canvas 不支持九参数 drawImage 时跳过覆盖，至少还能写日期 */
+		}
+	}
+	if (opts.dateText && dateBox.w) {
+		ctx.setFillStyle('#5a544c')
+		ctx.setFontSize(Math.max(12, Math.round(dateBox.h * 0.45)))
+		ctx.setTextAlign('center')
+		ctx.fillText(
+			String(opts.dateText),
+			(dateBox.x + dateBox.w / 2) * sx,
+			(dateBox.y + dateBox.h * 0.72) * sy
+		)
+		ctx.setTextAlign('left')
+	}
+
+	// 3. 用户文字：先换行，再按需要缩字号
+	const written = String(opts.line || '').trim()
+	const textBox = box(comp.text_box)
+	if (written && textBox.w && textBox.h) {
+		const maxW = textBox.w * sx
+		const maxH = textBox.h * sy
+		// 起点按文字框高度给（先大后小），再用「行数×行高」和宽度约束往下缩
+		let size = Math.max(12, Math.min(Math.round(maxH * 0.6), 44))
+		let lines = []
+		for (let guard = 0; guard < 24; guard += 1) {
+			lines = wrapByWidth(written, maxW, size)
+			if (lines.length * size * 1.5 <= maxH || size <= 12) break
+			size -= 2
+		}
+		ctx.setFillStyle('#3d3d3d')
+		ctx.setFontSize(size)
+		ctx.setTextAlign('left')
+		const startY = (textBox.y + size) * sy
+		lines.forEach((line, i) => {
+			ctx.fillText(line, textBox.x * sx, startY + i * size * 1.5)
+		})
+	}
+
+	ctx.draw(false, () => {
+		if (typeof done === 'function') done()
+	})
+}
+
+/** 按宽度断行：中文按 1 个字号宽、ASCII 按 0.55 字号宽估，够用且不依赖 measureText */
+function wrapByWidth(text, maxWidth, fontSize) {
+	const chars = String(text).split('')
+	const lines = []
+	let current = ''
+	let width = 0
+	chars.forEach((ch) => {
+		const w = /[\x00-\xff]/.test(ch) ? fontSize * 0.55 : fontSize
+		if (width + w > maxWidth && current) {
+			lines.push(current)
+			current = ch
+			width = w
+			return
+		}
+		current += ch
+		width += w
+	})
+	if (current) lines.push(current)
+	return lines
+}
+
 /**
  * 只把 canvas 导出成**临时文件**，返回临时路径（不进相册）。
  * 「攒进手帐」需要它：拿到临时路径后用 localJournal.persistImage() 转成持久文件。

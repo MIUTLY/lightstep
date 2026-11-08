@@ -12,6 +12,22 @@
  *   - 拆分只记录用户自报进度，不检查正确率/不要求留证或交答案；界面不要出现「上传 / 验收 / 正确率」。
  *   - 结构、字段名、接口参数均未变化。
  *
+ * ⚠️ 2026-11-08 再次升级到 main@b8e6e026（PR #20「每项任务的表现计步 + 公共素材托管」）：
+ *   - 新增 `presentation_completed_steps`：每项任务独立计步，成功 complete 才 +1（resize/打开/退出都不加），
+ *     与森林的 completed_leaf_ids 互相独立，**前端不许用叶子数或 steps_done 自己推票根**。
+ *   - `items[].presentation`、`focus.presentation`、旧的 `TaskView.presentation`、以及 receipt 事件的
+ *     `presentation` 都是同一结构：
+ *       { available, completed_steps, step_number, normal_stage, normal_pet:{url,width,height},
+ *         receipt:{id,url,preview:{url},composition:{…}}, source, asset_version }
+ *     数据不足时 available=false、step_number/receipt 为 null —— 这时用中性缺图，别随机挑票根。
+ *   - 新增 `presentation_policy`：{ catalogue_url:'/api/assets/manifest', idle_timeout_seconds:300,
+ *     idle_effect:'pet_image_only' }。
+ *   - 新增 `GET /api/assets/manifest` 与静态素材 `/api/assets/v1/**`（内容哈希 + 一年不可变缓存）。
+ *     素材地址用 `assetUrl()` 拼，别和带 /api 的基地址重复拼。
+ *   - receipt 事件新增 `occurred_date`（Asia/Shanghai 实际结束日）与 `presentation`；
+ *     原 `date` 是清单归属日。手账归档按 `occurred_date`。
+ *   - 协议细节见仓库 docs/task-presentation-assets.md。
+ *
  * 统一约定
  * ---------
  * - 写操作一律 POST + JSON body，读操作一律 GET + query。
@@ -41,6 +57,7 @@
  *   手帐改为客户端本地保存，见 utils/localJournal.js。
  */
 import { del, get, post } from './request.js'
+import { getBaseUrl } from './request.js'
 import { newRequestId } from '@/utils/requestId.js'
 
 /* ---------------- 会话 ---------------- */
@@ -79,6 +96,36 @@ export function sessionState(user_id) {
 /** 存活检查：{ status, storage, receipt_storage } */
 export function health() {
 	return get('/api/health')
+}
+
+/* ---------------- 公共素材（2026-11-08 起由后端托管） ---------------- */
+
+/**
+ * 素材清单：{ version, pets, receipts, journal, idle_policy, receipt_selection }
+ *
+ * - pets：6 张桌宠状态图（initial / starting / flow / reward / distracted / emergency_dark）
+ * - receipts：12 张票根（1.1~4.3），每张带 url / preview / composition（印字与日期坐标）
+ * - journal：大底图目前 available=false（等素材），不要自己画替代底图
+ * - idle_policy：前台 300 秒未操作只换走神图，不改任何状态
+ */
+export function assetsManifest() {
+	return get('/api/assets/manifest')
+}
+
+/**
+ * 把清单里的素材路径拼成可直接加载的地址。
+ *
+ * 清单里的 url 已经是「含 /api 的绝对路径」（如 /api/assets/v1/pets/initial-xxx.png），
+ * 所以只跟服务 origin 拼，不能和带 /api 的基地址重复拼接：
+ *   base = http://127.0.0.1:8000        → http://127.0.0.1:8000/api/assets/v1/...
+ *   base = http://127.0.0.1:8000/api    → 先去掉 /api 再拼
+ */
+export function assetUrl(path) {
+	if (!path) return ''
+	const raw = String(path)
+	if (/^https?:\/\//.test(raw)) return raw
+	const base = String(getBaseUrl() || '').replace(/\/+$/, '').replace(/\/api$/, '')
+	return base + (raw.charAt(0) === '/' ? raw : '/' + raw)
 }
 
 /* ---------------- 今日备忘录（新主流程） ---------------- */
