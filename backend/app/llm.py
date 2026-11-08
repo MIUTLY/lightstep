@@ -1,6 +1,6 @@
 """Real OpenAI-compatible provider. No offline task provider or template fallback."""
 import json
-from time import monotonic
+from time import monotonic, sleep
 from contextvars import ContextVar
 
 AI_DEADLINE = ContextVar("ai_deadline", default=None)
@@ -44,19 +44,22 @@ class OpenAICompatLLM:
     # 只有「失败得很快」的错误才值得重试：连接被重置通常 < 1s 就返回，
     # 而读到超时（几十秒）说明模型真的慢，再试一次只会把总耗时翻倍、
     # 反而让前端先超时（2026-11-08 实测：一次 45s 超时 + 重试 45s > 前端 60s 超时）。
-    RETRY_IF_FASTER_THAN = 8.0
-    RETRY_MIN_BUDGET = 10.0
+    # 快失败放宽到 3 次（每次之间歇 250ms）：演示时连续快速提问，DeepSeek 偶尔会连断两下，
+    # 两次重试都救不回来就整句失败；3 次能把这类瞬时抖动吃掉，最坏仍是 ≤6s×3+0.5s ≈ 19s。
+    RETRY_IF_FASTER_THAN = 6.0
+    RETRY_MIN_BUDGET = 8.0
+    RETRY_SLEEP = 0.25
 
     def _post_completion(self, payload, timeout_value, deadline=None):
-        """向 OpenAI 兼容接口发一次聊天请求；**快速失败时自动再试一次**。
+        """向 OpenAI 兼容接口发一次聊天请求；**快速失败时自动重试（最多 3 次）**。
 
         兼容性补丁（本地，覆盖后端时会被冲掉，需重打）：
         实测这台机器到 DeepSeek 的连接偶尔会被重置（一次对话要串行调十几次模型，
         任何一次抖动都会让整句回复变成「暂时连接不上AI」）。这里对 httpx.RequestError
-        做一次重试，但**仅当上一次是快速失败**，保证最坏总耗时仍小于前端 60s 超时。
+        做重试，但**仅当上一次是快速失败**，保证最坏总耗时仍远小于前端 60s 超时。
         不改变对外的错误码语义。
         """
-        attempts = 2
+        attempts = 3
         last = None
         for attempt in range(attempts):
             t = timeout_value
@@ -82,6 +85,7 @@ class OpenAICompatLLM:
                     raise
                 if deadline is not None and deadline - monotonic() <= self.RETRY_MIN_BUDGET:
                     raise
+                sleep(self.RETRY_SLEEP)
         raise last
 
     def _chat(self, system, user, *, json_mode=False, max_tokens=None, timeout=None):
