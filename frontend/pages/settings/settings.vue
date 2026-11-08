@@ -98,9 +98,14 @@ import { health } from '@/api/index.js'
 import SideDrawer from '@/components/SideDrawer.vue'
 import { useSettings } from '@/store/settings.js'
 import { useUser } from '@/store/user.js'
+import { useToday } from '@/store/today.js'
+import { useSession } from '@/store/session.js'
+import { clearEntries, listEntries } from '@/utils/localJournal.js'
 
 const settings = useSettings()
 const user = useUser()
+const today = useToday()
+const session = useSession()
 
 const version = APP_VERSION
 const baseUrl = ref('')
@@ -172,13 +177,52 @@ function editBaseUrl() {
 function onResetIdentity() {
 	uni.showModal({
 		title: '换一个人？',
-		content: '摩擦地图和跨天交接都跟着当前身份走，换了就重新开始。手帐也看不到了。',
+		content: '会换成一个全新的身份：备忘录、摩擦地图、跨天交接都从零开始，本机手账和想法也会一起清掉。',
 		confirmText: '换',
 		cancelText: '不换',
 		success: (res) => {
 			if (!res.confirm) return
+			// 1. 换身份（后端按 user_id 隔离，新 id 就是新用户）
 			user.reset()
-			uni.showToast({ title: '换好了', icon: 'none' })
+			// 2. 清内存里的旧视图：store 是单例，不清的话页面还显示上一个人的清单；
+			//    today.revision 也要归零，否则 apply() 会用 revision 守卫把新用户的空清单挡掉
+			today.reset()
+			session.reset()
+			// 3. 清本地数据：手账回执、事件去重记录、思绪倾倒
+			//    清之前先数一下有几条，弹 toast 时把条数报出来 —— 万一没清掉能立刻看出来
+			let clearedJournal = 0
+			try {
+				clearedJournal = listEntries().length
+			} catch (e) {
+				clearedJournal = 0
+			}
+			clearEntries()
+			today.clearEventCache()
+			try {
+				uni.removeStorageSync('lightstep_thoughts')
+			} catch (e) {
+				/* ignore */
+			}
+			// 清完再读一次确认：还剩下几条（正常应该是 0）
+			let leftJournal = 0
+			try {
+				leftJournal = listEntries().length
+			} catch (e) {
+				leftJournal = 0
+			}
+			uni.showToast({
+				title: leftJournal
+					? `手账没清掉（还剩 ${leftJournal} 条）`
+					: clearedJournal
+						? `换成新用户了，已清 ${clearedJournal} 条手账`
+						: '换成新用户了',
+				icon: 'none',
+				duration: 2600
+			})
+			// 4. 回首页重新开始（reLaunch 清空页面栈，避免旧页面残留旧数据）
+			setTimeout(() => {
+				uni.reLaunch({ url: '/pages/chat/chat' })
+			}, 350)
 		}
 	})
 }
