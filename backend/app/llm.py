@@ -41,13 +41,20 @@ class OpenAICompatLLM:
         self.decompose_max_tokens = s.llm_decompose_max_tokens
         self.thinking = s.llm_thinking
 
+    # 只有「失败得很快」的错误才值得重试：连接被重置通常 < 1s 就返回，
+    # 而读到超时（几十秒）说明模型真的慢，再试一次只会把总耗时翻倍、
+    # 反而让前端先超时（2026-11-08 实测：一次 45s 超时 + 重试 45s > 前端 60s 超时）。
+    RETRY_IF_FASTER_THAN = 8.0
+    RETRY_MIN_BUDGET = 10.0
+
     def _post_completion(self, payload, timeout_value, deadline=None):
-        """向 OpenAI 兼容接口发一次聊天请求；**网络抖动时自动再试一次**。
+        """向 OpenAI 兼容接口发一次聊天请求；**快速失败时自动再试一次**。
 
         兼容性补丁（本地，覆盖后端时会被冲掉，需重打）：
-        实测这台机器到 DeepSeek 的连接偶尔会被重置 / 读超时（一次对话要串行调十几次模型，
+        实测这台机器到 DeepSeek 的连接偶尔会被重置（一次对话要串行调十几次模型，
         任何一次抖动都会让整句回复变成「暂时连接不上AI」）。这里对 httpx.RequestError
-        （含 ConnectError / ReadError / Timeout）做一次立即重试，不改变对外的错误码语义。
+        做一次重试，但**仅当上一次是快速失败**，保证最坏总耗时仍小于前端 60s 超时。
+        不改变对外的错误码语义。
         """
         attempts = 2
         last = None
@@ -57,6 +64,7 @@ class OpenAICompatLLM:
                 t = min(t, deadline - monotonic())
                 if t <= 0:
                     raise httpx.TimeoutException("deadline exceeded")
+            started = monotonic()
             try:
                 response = httpx.post(f"{self.base_url}/chat/completions", json=payload,
                     headers={"Authorization": f"Bearer {self.api_key}"}, timeout=t)
@@ -67,7 +75,12 @@ class OpenAICompatLLM:
                 raise
             except httpx.RequestError as error:
                 last = error
+                elapsed = monotonic() - started
                 if attempt + 1 >= attempts:
+                    raise
+                if elapsed > self.RETRY_IF_FASTER_THAN:
+                    raise
+                if deadline is not None and deadline - monotonic() <= self.RETRY_MIN_BUDGET:
                     raise
         raise last
 
