@@ -17,7 +17,7 @@
 
 		<!-- 任务名（设计稿 x=246 y=132 宽309 55px 左对齐；换算成 rpx 见下方样式表） -->
 		<view class="wall">
-			<text class="task-title">{{ taskTitle }}</text>
+			<text class="task-title" :class="titleSizeClass">{{ taskTitle }}</text>
 		</view>
 
 		<!-- 当前这一步：设计稿里没有这一段，按产品需要单独放在标题下方（居中、不参与按钮定位） -->
@@ -213,6 +213,21 @@ const taskTitle = computed(() => {
 		if (item) return item.title
 	}
 	return '打开单词书'
+})
+
+/**
+ * 任务名不折行：按「字号当量宽度」逐档降字号。
+ * 中文字宽≈1 个字号、半角≈0.55 个字号；标题区宽 638rpx，留 2 成余量 ≈523rpx 可用。
+ */
+const titleSizeClass = computed(() => {
+	const title = String(taskTitle.value || '')
+	let em = 0
+	for (const ch of title) em += /[\x00-\xff]/.test(ch) ? 0.55 : 1
+	const budget = 638 * 0.82
+	if (em * 54 <= budget) return ''
+	if (em * 46 <= budget) return 'title-md'
+	if (em * 38 <= budget) return 'title-sm'
+	return 'title-xs'
 })
 
 const currentStep = computed(() => {
@@ -752,14 +767,18 @@ function backToMemo() {
 
 /* ---------- 墙面内容 ---------- */
 
-/* 任务名：设计稿 x=246 y=132 宽309 高81，55px 左对齐
-   → left 240rpx / top 129rpx / width 302rpx / 54rpx / 行高 1.47（81÷55） */
+/* 任务名：设计稿是 x=246 y=132 宽309，55px 左对齐、只放得下 5 个字。
+   真实任务名经常更长（「背50个英语单词」就 8 个字），照设计稿那样窄就会折行、
+   还会压到下面的「当前这一步」。所以这里放宽成整行居中 + 按字数降字号，
+   保证**一行放下不换行**（设计稿那种 5 字标题仍是最初的 54rpx）。 */
 .wall {
 	position: absolute;
-	left: 240rpx;
+	left: 56rpx;
+	right: 56rpx;
 	top: 129rpx;
-	width: 302rpx;
 	z-index: 3;
+	/* 极端长的标题宁可两边裁掉，也不要折行去压下面的「当前这一步」 */
+	overflow: hidden;
 }
 
 /* 任务名：设计稿 55px → 54rpx */
@@ -767,9 +786,26 @@ function backToMemo() {
 	display: block;
 	font-size: 54rpx;
 	line-height: 1.47;
-	text-align: left;
+	text-align: center;
 	color: #5e5d62;
 	letter-spacing: 2rpx;
+	/* 绝对不折行；字号按字数由 titleSizeClass 往下调，长标题放得下 */
+	white-space: nowrap;
+}
+
+.task-title.title-md {
+	font-size: 46rpx;
+	letter-spacing: 1rpx;
+}
+
+.task-title.title-sm {
+	font-size: 38rpx;
+	letter-spacing: 0;
+}
+
+.task-title.title-xs {
+	font-size: 32rpx;
+	letter-spacing: 0;
 }
 
 .task-step {
