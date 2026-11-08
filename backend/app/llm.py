@@ -41,6 +41,36 @@ class OpenAICompatLLM:
         self.decompose_max_tokens = s.llm_decompose_max_tokens
         self.thinking = s.llm_thinking
 
+    def _post_completion(self, payload, timeout_value, deadline=None):
+        """向 OpenAI 兼容接口发一次聊天请求；**网络抖动时自动再试一次**。
+
+        兼容性补丁（本地，覆盖后端时会被冲掉，需重打）：
+        实测这台机器到 DeepSeek 的连接偶尔会被重置 / 读超时（一次对话要串行调十几次模型，
+        任何一次抖动都会让整句回复变成「暂时连接不上AI」）。这里对 httpx.RequestError
+        （含 ConnectError / ReadError / Timeout）做一次立即重试，不改变对外的错误码语义。
+        """
+        attempts = 2
+        last = None
+        for attempt in range(attempts):
+            t = timeout_value
+            if deadline is not None:
+                t = min(t, deadline - monotonic())
+                if t <= 0:
+                    raise httpx.TimeoutException("deadline exceeded")
+            try:
+                response = httpx.post(f"{self.base_url}/chat/completions", json=payload,
+                    headers={"Authorization": f"Bearer {self.api_key}"}, timeout=t)
+                response.raise_for_status()
+                return response
+            except httpx.HTTPStatusError:
+                # 4xx/5xx 是明确的服务端答复，不重试（避免放大 429）
+                raise
+            except httpx.RequestError as error:
+                last = error
+                if attempt + 1 >= attempts:
+                    raise
+        raise last
+
     def _chat(self, system, user, *, json_mode=False, max_tokens=None, timeout=None):
         if self.provider != "openai" or not self.api_key or not self.base_url or not self.model:
             raise AIError("AI_NOT_CONFIGURED", "AI尚未正确配置，请联系维护者配置真实AI后重试。", 503)
@@ -65,10 +95,7 @@ class OpenAICompatLLM:
         if json_mode:
             payload["response_format"] = {"type": "json_object"}
         try:
-            response = httpx.post(f"{self.base_url}/chat/completions", json=payload,
-                headers={"Authorization": f"Bearer {self.api_key}"},
-                timeout=self.timeout if timeout is None else timeout)
-            response.raise_for_status()
+            response = self._post_completion(payload, self.timeout if timeout is None else timeout, deadline)
             data = response.json()
             choice = data["choices"][0]
             content = choice["message"]["content"]

@@ -4,7 +4,10 @@ import json
 from pathlib import Path
 
 ASSET_ROOT = Path(__file__).resolve().parents[1] / 'assets'
-MANIFEST = json.loads((ASSET_ROOT/'manifest.json').read_text())
+# 兼容性补丁（本地，覆盖后端时会被冲掉，需重打）：
+# read_text() 不传 encoding 时按系统区域解码，中文 Windows 是 GBK，
+# 读 UTF-8 的 manifest.json 会直接 UnicodeDecodeError（byte 0x80 非法）→ 后端起不来。
+MANIFEST = json.loads((ASSET_ROOT/'manifest.json').read_text(encoding='utf-8'))
 STAGES = ('initial','starting','flow','reward')
 
 
